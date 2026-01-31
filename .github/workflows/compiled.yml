@@ -16,7 +16,6 @@ jobs:
     steps:
       - name: Maximize build space
         run: |
-          # Clean up runner space (approx 14-20GB saved)
           rm -rf /usr/share/dotnet
           rm -rf /usr/local/lib/android
           rm -rf /opt/ghc
@@ -39,22 +38,22 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
             
-            # Optimization & CI flags
-            sed -i 's|_processor_opt:=.*|_processor_opt:=znver4|' PKGBUILD
-            sed -i 's|_localmodcfg:=.*|_localmodcfg:=no|' PKGBUILD
-            sed -i 's|_use_auto_optimization:=.*|_use_auto_optimization:=no|' PKGBUILD
-            sed -i 's|_unattended_make_prepare:=.*|_unattended_make_prepare:=yes|' PKGBUILD
-            sed -i 's|_makenconfig:=.*|_makenconfig:=no|' PKGBUILD
+            # Use a safer sed pattern that only targets the value between := and "
+            sed -i 's|_processor_opt:=.*"|_processor_opt:=znver4"|' PKGBUILD
+            sed -i 's|_localmodcfg:=.*"|_localmodcfg:=no"|' PKGBUILD
+            sed -i 's|_use_auto_optimization:=.*"|_use_auto_optimization:=no"|' PKGBUILD
+            sed -i 's|_unattended_make_prepare:=.*"|_unattended_make_prepare:=yes"|' PKGBUILD
+            sed -i 's|_makenconfig:=.*"|_makenconfig:=no"|' PKGBUILD
             
             echo "Verifying optimization target:"
             grep "_processor_opt:=" PKGBUILD
             
+            # Start the build
             makepkg -scf --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
         run: |
-          # Zip the packages
           zip linux-catgirl-znver4.zip *.pkg.tar.zst
           
       - name: Upload artifact
