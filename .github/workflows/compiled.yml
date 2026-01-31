@@ -38,17 +38,20 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
             
-            # Use a safer sed pattern that only targets the value between := and "
-            sed -i 's|_processor_opt:=.*"|_processor_opt:=znver4"|' PKGBUILD
-            sed -i 's|_localmodcfg:=.*"|_localmodcfg:=no"|' PKGBUILD
-            sed -i 's|_use_auto_optimization:=.*"|_use_auto_optimization:=no"|' PKGBUILD
-            sed -i 's|_unattended_make_prepare:=.*"|_unattended_make_prepare:=yes"|' PKGBUILD
-            sed -i 's|_makenconfig:=.*"|_makenconfig:=no"|' PKGBUILD
+            # Use the "Destroy and Rebuild" sed method. 
+            # This replaces the whole line regardless of what quotes were there before.
+            sed -i 's|_processor_opt:=.*|_processor_opt:=znver4"}|' PKGBUILD
+            sed -i 's|_localmodcfg:=.*|_localmodcfg:=no"}|' PKGBUILD
+            sed -i 's|_use_auto_optimization:=.*|_use_auto_optimization:=no"}|' PKGBUILD
+            sed -i 's|_unattended_make_prepare:=.*|_unattended_make_prepare:=yes"}|' PKGBUILD
+            sed -i 's|_makenconfig:=.*|_makenconfig:=no"}|' PKGBUILD
+
+            # Clean up any potential double-quotes we just created if the line already had them
+            sed -i 's|""|"|g' PKGBUILD
             
-            echo "Verifying optimization target:"
+            echo "Verifying optimization target (should be clean now):"
             grep "_processor_opt:=" PKGBUILD
             
-            # Start the build
             makepkg -scf --noconfirm --skipchecksums
           EOF
 
