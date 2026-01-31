@@ -38,22 +38,17 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
             
-            # Use exact matching to avoid breaking other lines or quotes
-            # This targets the standard default values found in most TKG-style PKGBUILDs
-            sed -i 's|_processor_opt:=""|_processor_opt:="znver4"|g' PKGBUILD
-            sed -i 's|_processor_opt:=|_processor_opt:="znver4"|g' PKGBUILD
+            # THE FIX: 
+            # We use '[^}]*' which means "match everything until the next closing bracket"
+            # This deletes the old value (whatever it was) and puts 'znver4' in its place.
             
-            # Force CI flags by targeting the exact default variable assignments
-            sed -i 's|_localmodcfg:=yes|_localmodcfg:=no|g' PKGBUILD
-            sed -i 's|_use_auto_optimization:=yes|_use_auto_optimization:=no|g' PKGBUILD
-            sed -i 's|_unattended_make_prepare:=no|_unattended_make_prepare:=yes|g' PKGBUILD
-            sed -i 's|_makenconfig:=yes|_makenconfig:=no|g' PKGBUILD
+            sed -i 's|_processor_opt:=[^}]*}|_processor_opt:=znver4}|' PKGBUILD
+            sed -i 's|_localmodcfg:=[^}]*}|_localmodcfg:=no}|' PKGBUILD
+            sed -i 's|_use_auto_optimization:=[^}]*}|_use_auto_optimization:=no}|' PKGBUILD
+            sed -i 's|_unattended_make_prepare:=[^}]*}|_unattended_make_prepare:=yes}|' PKGBUILD
+            sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
 
-            # Final cleanup: If we accidentally doubled up quotes, fix them
-            sed -i 's|""| "|g' PKGBUILD
-            sed -i 's|""|"|g' PKGBUILD
-            
-            echo "Verifying optimization target:"
+            echo "Verifying optimization target (Must look like : \"\${_processor_opt:=znver4}\")"
             grep "_processor_opt:=" PKGBUILD
             
             # Start the build
