@@ -34,15 +34,15 @@ jobs:
           useradd -m builduser
           echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-      - name: Fix workspace permissions
+      - name: Fix repo permissions ONLY
         run: |
-          chown -R builduser:builduser /__w
+          chown -R builduser:builduser "$GITHUB_WORKSPACE"
 
       - name: Build linux-catgirl-edition (ZNVER4)
         run: |
           sudo -u builduser bash <<'EOF'
           set -e
-          cd /__w/linux-catgirl-edition/linux-catgirl-edition
+          cd "$GITHUB_WORKSPACE"
 
           sed -i 's|: "${_localmodcfg:=yes}"|: "${_localmodcfg:=no}"|' PKGBUILD
           sed -i 's|: "${_processor_opt:=}"|: "${_processor_opt:=ZNVER4}"|' PKGBUILD
@@ -54,16 +54,14 @@ jobs:
           makepkg -scf --cleanbuild --skipchecksums
           EOF
 
-      - name: Zip build directory
+      - name: Zip build output
         run: |
-          cd /__w/linux-catgirl-edition
-          zip -r linux-catgirl-edition.zip linux-catgirl-edition \
-            -x "linux-catgirl-edition/.git/*" \
-               "linux-catgirl-edition/.github/*" \
-               "linux-catgirl-edition/README.md"
+          cd "$GITHUB_WORKSPACE"
+          zip -r linux-catgirl-edition.zip . \
+            -x ".git/*" ".github/*" "README.md"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-catgirl-edition-compiled
-          path: /__w/linux-catgirl-edition/linux-catgirl-edition.zip
+          path: linux-catgirl-edition.zip
