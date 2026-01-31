@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Maximize build space
         run: |
-          # Cleaning up the pre-installed bloat to make room for kernel objects
+          # Clean up runner space (approx 14-20GB saved)
           rm -rf /usr/share/dotnet
           rm -rf /usr/local/lib/android
           rm -rf /opt/ghc
@@ -30,38 +30,33 @@ jobs:
           pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo
           useradd -m builduser
           echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-          # Ensure builduser owns the checkout
           chown -R builduser:builduser $(pwd)
 
       - name: Build linux-catgirl-edition
         run: |
-          # Capture the absolute path to avoid the "null directory" error
-          export WORKSPACE_PATH=$(pwd)
-          
-          sudo -E -u builduser bash <<EOF
+          export WORKSPACE_PATH=$(pwd)          
+          sudo -E -u builduser bash <<'EOF'
             set -e
             cd "$WORKSPACE_PATH"
             
-            # Target Zen 4 optimizations
-            # Note: This assumes your PKGBUILD uses the _processor_opt variable
-            sed -i 's|: "\${_processor_opt:=.*}"|: "\${_processor_opt:=znver4}"|' PKGBUILD
+            # Optimization & CI flags
+            sed -i 's|_processor_opt:=.*|_processor_opt:=znver4|' PKGBUILD
+            sed -i 's|_localmodcfg:=.*|_localmodcfg:=no|' PKGBUILD
+            sed -i 's|_use_auto_optimization:=.*|_use_auto_optimization:=no|' PKGBUILD
+            sed -i 's|_unattended_make_prepare:=.*|_unattended_make_prepare:=yes|' PKGBUILD
+            sed -i 's|_makenconfig:=.*|_makenconfig:=no|' PKGBUILD
             
-            # CI/Silent Mode flags
-            sed -i 's|: "\${_localmodcfg:=yes}"|: "\${_localmodcfg:=no}"|' PKGBUILD
-            sed -i 's|: "\${_use_auto_optimization:=yes}"|: "\${_use_auto_optimization:=no}"|' PKGBUILD
-            sed -i 's|: "\${_unattended_make_prepare:=no}"|: "\${_unattended_make_prepare:=yes}"|' PKGBUILD
-            sed -i 's|: "\${_makenconfig:=yes}"|: "\${_makenconfig:=no}"|' PKGBUILD
+            echo "Verifying optimization target:"
+            grep "_processor_opt:=" PKGBUILD
             
-            # The actual compilation
-            # -s installs dependencies via pacman, -c cleans up temporary files
             makepkg -scf --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
         run: |
-          # Only zip the resulting Arch packages
+          # Zip the packages
           zip linux-catgirl-znver4.zip *.pkg.tar.zst
-
+          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
