@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
-      options: --privileged # Needed for some pacman operations
+      options: --privileged
 
     steps:
       - name: Maximize build space
-        # This removes pre-installed software to give the kernel build room to breathe
         run: |
+          # Cleaning up the pre-installed bloat to make room for kernel objects
           rm -rf /usr/share/dotnet
           rm -rf /usr/local/lib/android
           rm -rf /opt/ghc
@@ -30,32 +30,36 @@ jobs:
           pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo
           useradd -m builduser
           echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-          chown -R builduser:builduser "$GITHUB_WORKSPACE"
+          # Ensure builduser owns the checkout
+          chown -R builduser:builduser $(pwd)
 
       - name: Build linux-catgirl-edition
         run: |
-          sudo -u builduser bash <<'EOF'
+          # Capture the absolute path to avoid the "null directory" error
+          export WORKSPACE_PATH=$(pwd)
+          
+          sudo -E -u builduser bash <<EOF
             set -e
-            cd "$GITHUB_WORKSPACE"
+            cd "$WORKSPACE_PATH"
             
             # Target Zen 4 optimizations
-            sed -i 's|: "${_processor_opt:=.*}"|: "${_processor_opt:=ZENVER4}"|' PKGBUILD
+            # Note: This assumes your PKGBUILD uses the _processor_opt variable
+            sed -i 's|: "\${_processor_opt:=.*}"|: "\${_processor_opt:=ZENVER4}"|' PKGBUILD
             
-            # Essential CI flags to prevent it from hanging/asking questions
-            sed -i 's|: "${_localmodcfg:=yes}"|: "${_localmodcfg:=no}"|' PKGBUILD
-            sed -i 's|: "${_use_auto_optimization:=yes}"|: "${_use_auto_optimization:=no}"|' PKGBUILD
-            sed -i 's|: "${_unattended_make_prepare:=no}"|: "${_unattended_make_prepare:=yes}"|' PKGBUILD
-            sed -i 's|: "${_makenconfig:=yes}"|: "${_makenconfig:=no}"|' PKGBUILD
+            # CI/Silent Mode flags
+            sed -i 's|: "\${_localmodcfg:=yes}"|: "\${_localmodcfg:=no}"|' PKGBUILD
+            sed -i 's|: "\${_use_auto_optimization:=yes}"|: "\${_use_auto_optimization:=no}"|' PKGBUILD
+            sed -i 's|: "\${_unattended_make_prepare:=no}"|: "\${_unattended_make_prepare:=yes}"|' PKGBUILD
+            sed -i 's|: "\${_makenconfig:=yes}"|: "\${_makenconfig:=no}"|' PKGBUILD
             
-            # Build it!
-            # -f forces, -s installs missing deps, -c cleans up after
+            # The actual compilation
+            # -s installs dependencies via pacman, -c cleans up temporary files
             makepkg -scf --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
         run: |
-          # Only zip the actual packages (.pkg.tar.zst), not the whole source tree
-          # This keeps your artifact size small and useful.
+          # Only zip the resulting Arch packages
           zip linux-catgirl-znver4.zip *.pkg.tar.zst
 
       - name: Upload artifact
