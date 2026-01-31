@@ -32,7 +32,7 @@ jobs:
           sudo -u builduser bash <<'EOF'
             cd "$GITHUB_WORKSPACE"
             sed -i 's|: "${_localmodcfg:=yes}"|: "${_localmodcfg:=no}"|' PKGBUILD
-            sed -i 's|: "${_processor_opt:=}"|: "${_processor_opt:=GENERIC_V3}"|' PKGBUILD
+            sed -i 's|: "${_processor_opt:=}"|: "${_processor_opt:=ZNVER4}"|' PKGBUILD
             sed -i 's|: "${_use_auto_optimization:=yes}"|: "${_use_auto_optimization:=no}"|' PKGBUILD
             sed -i 's|: "${_unattended_make_prepare:=no}"|: "${_unattended_make_prepare:=yes}"|' PKGBUILD
             sed -i 's|: "${_makenconfig:=yes}"|: "${_makenconfig:=no}"|' PKGBUILD
