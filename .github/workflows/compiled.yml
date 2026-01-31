@@ -1,67 +1,65 @@
-name: Catgirl Edition Compiled
+name: Catgirl Edition Compiled (znver4)
 
 on:
+  workflow_dispatch:
   push:
-    branches:
-      - master
+    branches: [ master ]
 
 jobs:
   build:
     name: Build and Package
     runs-on: ubuntu-latest
-
     container:
       image: archlinux:latest
+      options: --privileged # Needed for some pacman operations
 
     steps:
+      - name: Maximize build space
+        # This removes pre-installed software to give the kernel build room to breathe
+        run: |
+          rm -rf /usr/share/dotnet
+          rm -rf /usr/local/lib/android
+          rm -rf /opt/ghc
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Initialize pacman keyring
-        run: |
-          pacman-key --init
-          pacman-key --populate archlinux
-
-      - name: Update system and install dependencies
+      - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm \
-            base-devel git zip bc cpio pahole \
-            python clang llvm lld sudo
-
-      - name: Create build user
-        run: |
+          pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo
           useradd -m builduser
           echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-
-      - name: Fix repo permissions ONLY
-        run: |
           chown -R builduser:builduser "$GITHUB_WORKSPACE"
 
-      - name: Build linux-catgirl-edition (ZNVER4)
+      - name: Build linux-catgirl-edition
         run: |
           sudo -u builduser bash <<'EOF'
-          set -e
-          cd "$GITHUB_WORKSPACE"
-
-          sed -i 's|: "${_localmodcfg:=yes}"|: "${_localmodcfg:=no}"|' PKGBUILD
-          sed -i 's|: "${_processor_opt:=}"|: "${_processor_opt:=ZNVER4}"|' PKGBUILD
-          sed -i 's|: "${_use_auto_optimization:=yes}"|: "${_use_auto_optimization:=no}"|' PKGBUILD
-          sed -i 's|: "${_unattended_make_prepare:=no}"|: "${_unattended_make_prepare:=yes}"|' PKGBUILD
-          sed -i 's|: "${_makenconfig:=yes}"|: "${_makenconfig:=no}"|' PKGBUILD
-          sed -i 's|: "${_no_compressed_initramfs:=yes}"|: "${_no_compressed_initramfs:=no}"|' PKGBUILD
-
-          makepkg -scf --cleanbuild --skipchecksums
+            set -e
+            cd "$GITHUB_WORKSPACE"
+            
+            # Target Zen 4 optimizations
+            sed -i 's|: "${_processor_opt:=.*}"|: "${_processor_opt:=ZENVER4}"|' PKGBUILD
+            
+            # Essential CI flags to prevent it from hanging/asking questions
+            sed -i 's|: "${_localmodcfg:=yes}"|: "${_localmodcfg:=no}"|' PKGBUILD
+            sed -i 's|: "${_use_auto_optimization:=yes}"|: "${_use_auto_optimization:=no}"|' PKGBUILD
+            sed -i 's|: "${_unattended_make_prepare:=no}"|: "${_unattended_make_prepare:=yes}"|' PKGBUILD
+            sed -i 's|: "${_makenconfig:=yes}"|: "${_makenconfig:=no}"|' PKGBUILD
+            
+            # Build it!
+            # -f forces, -s installs missing deps, -c cleans up after
+            makepkg -scf --noconfirm --skipchecksums
           EOF
 
-      - name: Zip build output
+      - name: Prepare and Upload Artifacts
         run: |
-          cd "$GITHUB_WORKSPACE"
-          zip -r linux-catgirl-edition.zip . \
-            -x ".git/*" ".github/*" "README.md"
+          # Only zip the actual packages (.pkg.tar.zst), not the whole source tree
+          # This keeps your artifact size small and useful.
+          zip linux-catgirl-znver4.zip *.pkg.tar.zst
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-catgirl-edition-compiled
-          path: linux-catgirl-edition.zip
+          name: linux-catgirl-edition-znver4
+          path: linux-catgirl-znver4.zip
