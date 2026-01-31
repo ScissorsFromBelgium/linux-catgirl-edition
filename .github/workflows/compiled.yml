@@ -1,4 +1,4 @@
-name: Catgirl Edition Compiled
+name: Catgirl Edition Compiledd
 
 on:
   push:
@@ -8,41 +8,48 @@ on:
 jobs:
   build:
     name: Build and Package
-    runs-on: self-hosted
-    container:
-      image: archlinux:latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies and create build user
+      - name: Install Docker
         run: |
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld
-          useradd -m builduser
-          echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+          sudo apt-get update
+          sudo apt-get install -y docker.io
+          sudo systemctl start docker
 
-      - name: Fix workspace permissions
+      - name: Build linux-catgirl-edition inside Arch Linux container
         run: |
-          chown -R builduser:builduser "$GITHUB_WORKSPACE"
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            archlinux:latest bash -c '
+              set -e
 
-      - name: Build linux-catgirl-edition via makepkg
-        run: | # The sed command is for turning on CI mode
-          sudo -u builduser bash <<'EOF'
-            cd "$GITHUB_WORKSPACE"
-            sed -i 's|: "${_localmodcfg:=yes}"|: "${_localmodcfg:=no}"|' PKGBUILD
-            sed -i 's|: "${_processor_opt:=}"|: "${_processor_opt:=ZNVER4}"|' PKGBUILD
-            sed -i 's|: "${_use_auto_optimization:=yes}"|: "${_use_auto_optimization:=no}"|' PKGBUILD
-            sed -i 's|: "${_unattended_make_prepare:=no}"|: "${_unattended_make_prepare:=yes}"|' PKGBUILD
-            sed -i 's|: "${_makenconfig:=yes}"|: "${_makenconfig:=no}"|' PKGBUILD
-            sed -i 's|: "${_no_compressed_initramfs:=yes}"|: "${_no_compressed_initramfs:=no}"|' PKGBUILD
-            makepkg -scf --cleanbuild --skipchecksums
-          EOF
+              pacman -Syu --noconfirm
+              pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo
 
-      - name: .zip the linux-catgirl-edition directory
+              useradd -m builduser
+              echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+              chown -R builduser:builduser /workspace
+
+              sudo -u builduser bash <<EOF
+                cd /workspace
+                sed -i "s|: \"\\\${_localmodcfg:=yes}\"|: \"\\\${_localmodcfg:=no}\"|" PKGBUILD
+                sed -i "s|: \"\\\${_processor_opt:=}\"|: \"\\\${_processor_opt:=ZNVER4}\"|" PKGBUILD
+                sed -i "s|: \"\\\${_use_auto_optimization:=yes}\"|: \"\\\${_use_auto_optimization:=no}\"|" PKGBUILD
+                sed -i "s|: \"\\\${_unattended_make_prepare:=no}\"|: \"\\\${_unattended_make_prepare:=yes}\"|" PKGBUILD
+                sed -i "s|: \"\\\${_makenconfig:=yes}\"|: \"\\\${_makenconfig:=no}\"|" PKGBUILD
+                sed -i "s|: \"\\\${_no_compressed_initramfs:=yes}\"|: \"\\\${_no_compressed_initramfs:=no}\"|" PKGBUILD
+                makepkg -scf --cleanbuild --skipchecksums
+              EOF
+            '
+
+      - name: Zip build output
         run: |
-          zip -r linux-catgirl-edition.zip . -x ".git/*" ".github/*" "README.md" "linux-[0-9]*.tar.xz"
+          zip -r linux-catgirl-edition.zip . \
+            -x ".git/*" ".github/*" "README.md" "linux-[0-9]*.tar.xz"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
