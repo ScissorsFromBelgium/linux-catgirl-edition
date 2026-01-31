@@ -16,6 +16,7 @@ jobs:
     steps:
       - name: Maximize build space
         run: |
+          # Clear space for the heavy Zen 4 build
           rm -rf /usr/share/dotnet
           rm -rf /usr/local/lib/android
           rm -rf /opt/ghc
@@ -38,37 +39,32 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
             
-            # --- OVERRIDE LOGIC ---
-            # Instead of sed-ing variables, we prepend our choices to the prepare() function
-            # This ensures they are set correctly regardless of defaults.
-            
-            sed -i '/prepare() {/a \
-              _processor_opt="znver4"; \
-              _O3_opt="1"; \
-              _preempt="full"; \
-              _tickrate="1000"; \
-              _disable_stack_init="1"; \
-              _disable_memory_init="1"; \
-              _no_printk="1"; \
-              _no_corruption_check="1"; \
-              _no_bug="1"; \
-              _no_coredump="1"; \
-              _no_tracing="1"; \
-              _no_paravirt="1"; \
-              _no_modify_ldt="1"; \
-              _no_sched_debug="1"; \
-              _lto_mode="thin"; \
-              _unwinder="guess"; \
-              _trim_unused_headers="yes"; \
-              _tcp_bbr3="1"; \
-              _sched_ext="1"; \
-              _no_32bit="0"; \
-              _localmodcfg="no"; \
-              _unattended_make_prepare="yes";' PKGBUILD
+            # --- DEFINE EXTREME SETTINGS AS ENV VARS ---
+            # This is the safest way to override PKGBUILD defaults
+            export _processor_opt="znver4"
+            export _O3_opt="1"
+            export _preempt="full"
+            export _tickrate="1000"
+            export _disable_stack_init="1"
+            export _disable_memory_init="1"
+            export _no_printk="1"
+            export _no_corruption_check="1"
+            export _no_bug="1"
+            export _no_coredump="1"
+            export _no_tracing="1"
+            export _no_paravirt="1"
+            export _no_modify_ldt="1"
+            export _no_sched_debug="1"
+            export _lto_mode="thin"
+            export _unwinder="guess"
+            export _trim_unused_headers="yes"
+            export _tcp_bbr3="1"
+            export _sched_ext="1"
+            export _no_32bit="0"
+            export _localmodcfg="no"
+            export _unattended_make_prepare="yes"
 
-            # Final check to see the injection
-            head -n 50 PKGBUILD | grep "_tickrate"
-            
+            # Run the build
             makepkg -scf --noconfirm --skipchecksums
           EOF
 
