@@ -1,4 +1,4 @@
-name: Catgirl Edition Compiled (znver4)
+name: Catgirl Edition Extreme (znver4 + sched-ext)
 
 on:
   workflow_dispatch:
@@ -38,29 +38,52 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
             
-            # THE FIX: 
-            # We use '[^}]*' which means "match everything until the next closing bracket"
-            # This deletes the old value (whatever it was) and puts 'znver4' in its place.
-            
+            # --- PERFORMANCE & ARCH ---
             sed -i 's|_processor_opt:=[^}]*}|_processor_opt:=znver4}|' PKGBUILD
-            sed -i 's|_localmodcfg:=[^}]*}|_localmodcfg:=no}|' PKGBUILD
-            sed -i 's|_use_auto_optimization:=[^}]*}|_use_auto_optimization:=no}|' PKGBUILD
-            sed -i 's|_unattended_make_prepare:=[^}]*}|_unattended_make_prepare:=yes}|' PKGBUILD
-            sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
-
-            echo "Verifying optimization target (Must look like : \"\${_processor_opt:=znver4}\")"
-            grep "_processor_opt:=" PKGBUILD
+            sed -i 's|_O3_opt:=[^}]*}|_O3_opt:=1}|' PKGBUILD
+            sed -i 's|_preempt:=[^}]*}|_preempt:=full}|' PKGBUILD
+            sed -i 's|_tickrate:=[^}]*}|_tickrate:=1000}|' PKGBUILD
             
-            # Start the build
+            # --- SECURITY vs SPEED (DANGEROUS ZONE) ---
+            sed -i 's|_disable_stack_init:=[^}]*}|_disable_stack_init:=1}|' PKGBUILD
+            sed -i 's|_disable_memory_init:=[^}]*}|_disable_memory_init:=1}|' PKGBUILD
+            sed -i 's|_no_printk:=[^}]*}|_no_printk:=1}|' PKGBUILD
+            sed -i 's|_no_corruption_check:=[^}]*}|_no_corruption_check:=1}|' PKGBUILD
+            
+            # --- BLOAT REMOVAL ---
+            sed -i 's|_no_bug:=[^}]*}|_no_bug:=1}|' PKGBUILD
+            sed -i 's|_no_coredump:=[^}]*}|_no_coredump:=1}|' PKGBUILD
+            sed -i 's|_no_tracing:=[^}]*}|_no_tracing:=1}|' PKGBUILD
+            sed -i 's|_no_paravirt:=[^}]*}|_no_paravirt:=1}|' PKGBUILD
+            sed -i 's|_no_modify_ldt:=[^}]*}|_no_modify_ldt:=1}|' PKGBUILD
+            sed -i 's|_no_sched_debug:=[^}]*}|_no_sched_debug:=1}|' PKGBUILD
+            
+            # --- COMPILER & UNWINDER ---
+            sed -i 's|_lto_mode:=[^}]*}|_lto_mode:=thin}|' PKGBUILD
+            sed -i 's|_unwinder:=[^}]*}|_unwinder:=guess}|' PKGBUILD
+            sed -i 's|_trim_unused_headers:=[^}]*}|_trim_unused_headers:=yes}|' PKGBUILD
+            
+            # --- FEATURES ---
+            sed -i 's|_tcp_bbr3:=[^}]*}|_tcp_bbr3:=1}|' PKGBUILD
+            sed -i 's|_sched_ext:=[^}]*}|_sched_ext:=1}|' PKGBUILD
+            sed -i 's|_no_32bit:=[^}]*}|_no_32bit:=0}|' PKGBUILD # KEEPING 32-bit as requested
+            
+            # --- CI AUTOMATION FLAGS ---
+            sed -i 's|_localmodcfg:=[^}]*}|_localmodcfg:=no}|' PKGBUILD
+            sed -i 's|_unattended_make_prepare:=[^}]*}|_unattended_make_prepare:=yes}|' PKGBUILD
+
+            echo "Verifying znver4 and no_printk:"
+            grep -E "_processor_opt|_no_printk" PKGBUILD
+            
             makepkg -scf --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
         run: |
-          zip linux-catgirl-znver4.zip *.pkg.tar.zst
+          zip linux-catgirl-extreme.zip *.pkg.tar.zst
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-catgirl-edition-znver4
-          path: linux-catgirl-znver4.zip
+          name: linux-catgirl-extreme-znver4
+          path: linux-catgirl-extreme.zip
