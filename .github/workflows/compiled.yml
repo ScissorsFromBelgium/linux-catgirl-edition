@@ -1,4 +1,37 @@
-- name: Build linux-catgirl-edition
+name: "Catgirl Edition Extreme (znver4 + sched-ext)"
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+    name: Build and Package
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --privileged
+
+    steps:
+      - name: Maximize build space
+        run: |
+          rm -rf /usr/share/dotnet
+          rm -rf /usr/local/lib/android
+          rm -rf /opt/ghc
+
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo
+          useradd -m builduser
+          echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+          chown -R builduser:builduser $(pwd)
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build linux-catgirl-edition
         run: |
           export WORKSPACE_PATH=$(pwd)          
           sudo -E -u builduser bash <<'EOF'
@@ -10,9 +43,10 @@
             sed -i 's|_processor_opt:=[^}]*}|_processor_opt:=znver4}|' PKGBUILD
             sed -i 's|_O3_opt:=[^}]*}|_O3_opt:=1}|' PKGBUILD
             
-            # Fix Preempt and Tickrate (using labels likely expected by the script)
+            # Fix Preempt and Tickrate
+            # If 1000 failed before, we use the value the script logic likely expects
             sed -i 's|_preempt:=[^}]*}|_preempt:=full}|' PKGBUILD
-            sed -i 's|_tickrate:=[^}]*}|_tickrate:=1000HZ}|' PKGBUILD
+            sed -i 's|_tickrate:=[^}]*}|_tickrate:=1000}|' PKGBUILD
             
             # --- THE EXTREME TOGGLES ---
             sed -i 's|_disable_stack_init:=[^}]*}|_disable_stack_init:=1}|' PKGBUILD
@@ -48,3 +82,13 @@
             
             makepkg -scf --noconfirm --skipchecksums
           EOF
+
+      - name: Prepare and Upload Artifacts
+        run: |
+          zip linux-catgirl-extreme.zip *.pkg.tar.zst
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-catgirl-extreme-znver4
+          path: linux-catgirl-extreme.zip
