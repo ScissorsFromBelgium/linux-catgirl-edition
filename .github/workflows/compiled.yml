@@ -44,7 +44,7 @@ jobs:
             
             # Target Zen 4 optimizations
             # Note: This assumes your PKGBUILD uses the _processor_opt variable
-            sed -i 's|: "\${_processor_opt:=.*}"|: "\${_processor_opt:=ZENVER4}"|' PKGBUILD
+            sed -i 's|: "\${_processor_opt:=.*}"|: "\${_processor_opt:=ZNVER4}"|' PKGBUILD
             
             # CI/Silent Mode flags
             sed -i 's|: "\${_localmodcfg:=yes}"|: "\${_localmodcfg:=no}"|' PKGBUILD
