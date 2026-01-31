@@ -1,37 +1,4 @@
-name: Catgirl Edition Extreme (znver4 + sched-ext)
-
-on:
-  workflow_dispatch:
-  push:
-    branches: [ master ]
-
-jobs:
-  build:
-    name: Build and Package
-    runs-on: ubuntu-latest
-    container:
-      image: archlinux:latest
-      options: --privileged
-
-    steps:
-      - name: Maximize build space
-        run: |
-          rm -rf /usr/share/dotnet
-          rm -rf /usr/local/lib/android
-          rm -rf /opt/ghc
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo
-          useradd -m builduser
-          echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-          chown -R builduser:builduser $(pwd)
-
-      - name: Build linux-catgirl-edition
+- name: Build linux-catgirl-edition
         run: |
           export WORKSPACE_PATH=$(pwd)          
           sudo -E -u builduser bash <<'EOF'
@@ -39,12 +6,15 @@ jobs:
             cd "$WORKSPACE_PATH"
             
             # --- PERFORMANCE & ARCH ---
+            # Set Zen 4 and O3
             sed -i 's|_processor_opt:=[^}]*}|_processor_opt:=znver4}|' PKGBUILD
             sed -i 's|_O3_opt:=[^}]*}|_O3_opt:=1}|' PKGBUILD
-            sed -i 's|_preempt:=[^}]*}|_preempt:=full}|' PKGBUILD
-            sed -i 's|_tickrate:=[^}]*}|_tickrate:=1000}|' PKGBUILD
             
-            # --- SECURITY vs SPEED (DANGEROUS ZONE) ---
+            # Fix Preempt and Tickrate (using labels likely expected by the script)
+            sed -i 's|_preempt:=[^}]*}|_preempt:=full}|' PKGBUILD
+            sed -i 's|_tickrate:=[^}]*}|_tickrate:=1000HZ}|' PKGBUILD
+            
+            # --- THE EXTREME TOGGLES ---
             sed -i 's|_disable_stack_init:=[^}]*}|_disable_stack_init:=1}|' PKGBUILD
             sed -i 's|_disable_memory_init:=[^}]*}|_disable_memory_init:=1}|' PKGBUILD
             sed -i 's|_no_printk:=[^}]*}|_no_printk:=1}|' PKGBUILD
@@ -66,24 +36,15 @@ jobs:
             # --- FEATURES ---
             sed -i 's|_tcp_bbr3:=[^}]*}|_tcp_bbr3:=1}|' PKGBUILD
             sed -i 's|_sched_ext:=[^}]*}|_sched_ext:=1}|' PKGBUILD
-            sed -i 's|_no_32bit:=[^}]*}|_no_32bit:=0}|' PKGBUILD # KEEPING 32-bit as requested
+            sed -i 's|_no_32bit:=[^}]*}|_no_32bit:=0}|' PKGBUILD
             
-            # --- CI AUTOMATION FLAGS ---
+            # CI AUTOMATION
             sed -i 's|_localmodcfg:=[^}]*}|_localmodcfg:=no}|' PKGBUILD
             sed -i 's|_unattended_make_prepare:=[^}]*}|_unattended_make_prepare:=yes}|' PKGBUILD
 
-            echo "Verifying znver4 and no_printk:"
-            grep -E "_processor_opt|_no_printk" PKGBUILD
+            # Final check before running
+            echo "Checking processed variables:"
+            grep -E "_processor_opt|_tickrate|_no_printk|_preempt" PKGBUILD
             
             makepkg -scf --noconfirm --skipchecksums
           EOF
-
-      - name: Prepare and Upload Artifacts
-        run: |
-          zip linux-catgirl-extreme.zip *.pkg.tar.zst
-          
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-catgirl-extreme-znver4
-          path: linux-catgirl-extreme.zip
