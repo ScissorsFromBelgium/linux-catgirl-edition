@@ -23,8 +23,8 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
-          # pahole is strictly required for BTF/sched-ext
-          pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo
+          # Added ncurses for terminal compatibility if needed
+          pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo ncurses
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,6 +41,11 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
             
+            # --- FORCE NON-INTERACTIVE MODE ---
+            # This stops the PKGBUILD from trying to open 'nconfig'
+            sed -i 's|_micro_optimize:=[^}]*}|_micro_optimize:=no}|' PKGBUILD
+            sed -i 's|interactive=.*|interactive=no|' PKGBUILD
+            
             # --- PKGBUILD BASIC CONFIG ---
             sed -i 's|_processor_opt:=[^}]*}|_processor_opt:=znver4}|' PKGBUILD
             sed -i 's|_cflags_O3:=[^}]*}|_cflags_O3:=yes}|' PKGBUILD
@@ -53,7 +58,6 @@ jobs:
             sed -i 's|_die "|true; #|g' PKGBUILD
 
             # --- INJECT CONFIG FLAGS ---
-            # We use find to locate the actual directory (type d) to avoid "too many arguments"
             sed -i '/prepare() {/a \
               KDIR=$(find . -maxdepth 1 -type d -name "linux-*" | head -n 1) \
               cd "$KDIR" \
@@ -64,9 +68,11 @@ jobs:
               scripts/config -e BPF_JIT_ALWAYS_ON \
               scripts/config -e BPF_JIT_DEFAULT_ON \
               scripts/config -e SCHED_CLASS_EXT \
+              scripts/config -e TICK_CPU_ACCOUNTING \
               cd ..' PKGBUILD
 
-            # Start the build
+            # Start the build with a fake terminal set
+            export TERM=xterm
             makepkg -scf --noconfirm --skipchecksums
           EOF
 
