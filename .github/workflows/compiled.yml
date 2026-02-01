@@ -30,7 +30,7 @@ jobs:
 
       - name: Build linux-catgirl-edition
         run: |
-          # Setup build user
+          # Create build user
           useradd -m builduser
           chown -R builduser:builduser .
           printf 'builduser ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builduser
@@ -40,27 +40,24 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
             
-            # --- AGGRESSIVE INTERACTIVE BYPASS ---
-            # We force every possible "menu" flag to 'no'
+            # --- THE NUCLEAR MENU KILLER ---
+            # This forces the PKGBUILD to skip ALL interactive menus
             sed -i 's|_micro_optimize:=[^}]*}|_micro_optimize:=no}|' PKGBUILD
             sed -i 's|_using_nconfig:=[^}]*}|_using_nconfig:=no}|' PKGBUILD
-            sed -i 's|_using_xconfig:=[^}]*}|_using_xconfig:=no}|' PKGBUILD
-            sed -i 's|_using_gconfig:=[^}]*}|_using_gconfig:=no}|' PKGBUILD
             sed -i 's|_using_menuconfig:=[^}]*}|_using_menuconfig:=no}|' PKGBUILD
             sed -i 's|interactive=.*|interactive=no|' PKGBUILD
             
-            # --- PKGBUILD BASIC CONFIG ---
+            # --- KERNEL CONFIG ---
             sed -i 's|_processor_opt:=[^}]*}|_processor_opt:=znver4}|' PKGBUILD
             sed -i 's|_cflags_O3:=[^}]*}|_cflags_O3:=yes}|' PKGBUILD
             sed -i 's|_use_llvm_lto:=[^}]*}|_use_llvm_lto:=thin}|' PKGBUILD
             sed -i 's|_cpusched:=[^}]*}|_cpusched:=bore}|' PKGBUILD
-            sed -i 's|_tickrate:=[^}]*}|_tickrate:=full}|' PKGBUILD
-            sed -i 's|_no_btf:=[^}]*}|_no_btf:=no}|' PKGBUILD
             
             # --- BYPASS CONFLICTS ---
             sed -i 's|_die "|true; #|g' PKGBUILD
 
-            # --- INJECT CONFIG FLAGS ---
+            # --- PRE-CONFIGURING SCHED-EXT ---
+            # We inject the config commands directly into the PKGBUILD prepare function
             sed -i '/prepare() {/a \
               KDIR=$(find . -maxdepth 1 -type d -name "linux-*" | head -n 1) \
               cd "$KDIR" \
@@ -68,14 +65,12 @@ jobs:
               scripts/config -e BPF_SYSCALL \
               scripts/config -e BPF_JIT \
               scripts/config -e DEBUG_INFO_BTF \
-              scripts/config -e BPF_JIT_ALWAYS_ON \
-              scripts/config -e BPF_JIT_DEFAULT_ON \
               scripts/config -e SCHED_CLASS_EXT \
-              scripts/config -e TICK_CPU_ACCOUNTING \
+              scripts/config --set-str DEFAULT_HOSTNAME "catgirl" \
               cd ..' PKGBUILD
 
-            # Start the build. We use yes | to pipe "yes" to any unexpected prompts.
-            export TERM=xterm
+            # Build it. The yes "" | ensures any hidden prompts get an 'Enter' key.
+            export TERM=dumb
             yes "" | makepkg -scf --noconfirm --skipchecksums
           EOF
 
