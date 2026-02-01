@@ -23,7 +23,6 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
-          # Added ncurses for terminal compatibility if needed
           pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo ncurses
 
       - name: Checkout repository
@@ -41,9 +40,13 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
             
-            # --- FORCE NON-INTERACTIVE MODE ---
-            # This stops the PKGBUILD from trying to open 'nconfig'
+            # --- AGGRESSIVE INTERACTIVE BYPASS ---
+            # We force every possible "menu" flag to 'no'
             sed -i 's|_micro_optimize:=[^}]*}|_micro_optimize:=no}|' PKGBUILD
+            sed -i 's|_using_nconfig:=[^}]*}|_using_nconfig:=no}|' PKGBUILD
+            sed -i 's|_using_xconfig:=[^}]*}|_using_xconfig:=no}|' PKGBUILD
+            sed -i 's|_using_gconfig:=[^}]*}|_using_gconfig:=no}|' PKGBUILD
+            sed -i 's|_using_menuconfig:=[^}]*}|_using_menuconfig:=no}|' PKGBUILD
             sed -i 's|interactive=.*|interactive=no|' PKGBUILD
             
             # --- PKGBUILD BASIC CONFIG ---
@@ -71,9 +74,9 @@ jobs:
               scripts/config -e TICK_CPU_ACCOUNTING \
               cd ..' PKGBUILD
 
-            # Start the build with a fake terminal set
+            # Start the build. We use yes | to pipe "yes" to any unexpected prompts.
             export TERM=xterm
-            makepkg -scf --noconfirm --skipchecksums
+            yes "" | makepkg -scf --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
