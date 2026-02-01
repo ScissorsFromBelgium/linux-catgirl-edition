@@ -52,10 +52,10 @@ jobs:
             # --- BYPASS CONFLICTS ---
             sed -i 's|_die "|true; #|g' PKGBUILD
 
-            # --- INJECT CONFIG FLAGS (WITH CORRECT DIRECTORY) ---
-            # We must enter the extracted kernel source directory before running scripts/config
+            # --- INJECT CONFIG FLAGS ---
+            # We use a wildcard 'linux-$_major*' to handle the dot naming quirk safely.
             sed -i '/prepare() {/a \
-              cd "linux-$_major.$_minor" \
+              cd "linux-$_major"* \
               scripts/config -e BPF \
               scripts/config -e BPF_SYSCALL \
               scripts/config -e BPF_JIT \
@@ -71,7 +71,6 @@ jobs:
 
       - name: Prepare and Upload Artifacts
         run: |
-          # Find the package (using wildcard to catch the znver4 name)
           zip linux-catgirl-extreme-znver4.zip *.pkg.tar.zst
           
       - name: Upload artifact
