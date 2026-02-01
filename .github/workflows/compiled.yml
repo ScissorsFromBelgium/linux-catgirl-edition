@@ -23,63 +23,62 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
+          # Required for BTF and kernel building
           pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo
-          useradd -m builduser
-          echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-          chown -R builduser:builduser $(pwd)
 
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Build linux-catgirl-edition
         run: |
+          # Create a build user because makepkg cannot run as root
+          useradd -m builduser
+          chown -R builduser:builduser .
+          printf 'builduser ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builduser
+          
           export WORKSPACE_PATH=$(pwd)          
           sudo -E -u builduser bash <<'EOF'
             set -e
             cd "$WORKSPACE_PATH"
             
-            # --- APPLY EXTREME OPTIMIZATIONS DIRECTLY ---
-            # Using the variable names found in your PKGBUILD
-            
-            # CPU & Compiler
+            # --- PKGBUILD SETTINGS ---
+            # Optimize for Zen 4 and enable O3/LTO
             sed -i 's|_processor_opt:=[^}]*}|_processor_opt:=znver4}|' PKGBUILD
             sed -i 's|_cflags_O3:=[^}]*}|_cflags_O3:=yes}|' PKGBUILD
             sed -i 's|_use_llvm_lto:=[^}]*}|_use_llvm_lto:=thin}|' PKGBUILD
-            
-            # Scheduler & Ticks
             sed -i 's|_cpusched:=[^}]*}|_cpusched:=bore}|' PKGBUILD
-            sed -i 's|_HZ_ticks:=[^}]*}|_HZ_ticks:=1000}|' PKGBUILD
             sed -i 's|_tickrate:=[^}]*}|_tickrate:=full}|' PKGBUILD
-            sed -i 's|_preempt:=[^}]*}|_preempt:=full}|' PKGBUILD
             
-            # Features & Bloat Removal
-            sed -i 's|_tcp_bbr3:=[^}]*}|_tcp_bbr3:=yes}|' PKGBUILD
-            sed -i 's|_no_32bit:=[^}]*}|_no_32bit:=no}|' PKGBUILD
-            sed -i 's|_no_vm:=[^}]*}|_no_vm:=yes}|' PKGBUILD
-            sed -i 's|_disable_debugging:=[^}]*}|_disable_debugging:=yes}|' PKGBUILD
-            sed -i 's|_no_core_dump:=[^}]*}|_no_core_dump:=yes}|' PKGBUILD
-            sed -i 's|_disable_watchdog_driver:=[^}]*}|_disable_watchdog_driver:=yes}|' PKGBUILD
-            sed -i 's|_disable_hibernation:=[^}]*}|_disable_hibernation:=yes}|' PKGBUILD
+            # --- ENABLE SCHED-EXT PREREQUISITES ---
+            # Ensure BTF is NOT disabled in the PKGBUILD variables
+            sed -i 's|_no_btf:=[^}]*}|_no_btf:=no}|' PKGBUILD
             
-            # CI/Automation fixes
-            sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
-            sed -i 's|_unattended_make_prepare:=[^}]*}|_unattended_make_prepare:=yes}|' PKGBUILD
-            sed -i 's|_localmodcfg:=[^}]*}|_localmodcfg:=no}|' PKGBUILD
+            # --- INJECT CONFIG FLAGS ---
+            # The scx README specifies these 7 flags are mandatory.
+            # We inject them into the 'prepare' function of the PKGBUILD.
+            sed -i '/prepare() {/a \
+              scripts/config -e BPF \
+              scripts/config -e BPF_SYSCALL \
+              scripts/config -e BPF_JIT \
+              scripts/config -e DEBUG_INFO_BTF \
+              scripts/config -e BPF_JIT_ALWAYS_ON \
+              scripts/config -e BPF_JIT_DEFAULT_ON \
+              scripts/config -e SCHED_CLASS_EXT' PKGBUILD
 
-            # --- THE "SLEDGEHAMMER" BYPASS ---
-            # This prevents the script from exiting if it doesn't like our values.
-            # It replaces any call to the _die function with a simple "true" (do nothing).
+            # --- BYPASS CONFLICTS ---
+            # Prevent the script from dying if it finds local changes
             sed -i 's|_die "|true; #|g' PKGBUILD
 
+            # Start the build
             makepkg -scf --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
         run: |
-          zip linux-catgirl-extreme.zip *.pkg.tar.zst
+          zip linux-catgirl-extreme-znver4.zip *.pkg.tar.zst
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-catgirl-extreme-znver4
-          path: linux-catgirl-extreme.zip
+          path: linux-catgirl-extreme-znver4.zip
