@@ -30,7 +30,6 @@ jobs:
 
       - name: Build linux-catgirl-edition
         run: |
-          # Create build user
           useradd -m builduser
           chown -R builduser:builduser .
           printf 'builduser ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builduser
@@ -39,39 +38,49 @@ jobs:
           sudo -E -u builduser bash <<'EOF'
             set -e
             cd "$WORKSPACE_PATH"
-            
-            # --- THE NUCLEAR MENU KILLER ---
-            # This forces the PKGBUILD to skip ALL interactive menus
+
+            # --- ENV VARS FOR CATGIRL PKGBUILD ---
+            export _processor_opt="znver4"
+            export _O3_opt="1"
+            export _preempt="full"
+            export _tickrate="1000"
+            export _lto_mode="thin"
+            export _sched_ext="1"
+            export _tcp_bbr3="1"
+            export _unattended_make_prepare="yes"
+            export _makenconfig="no"
+
+            # --- SLEDGEHAMMER MENU BYPASS ---
+            sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
             sed -i 's|_micro_optimize:=[^}]*}|_micro_optimize:=no}|' PKGBUILD
-            sed -i 's|_using_nconfig:=[^}]*}|_using_nconfig:=no}|' PKGBUILD
-            sed -i 's|_using_menuconfig:=[^}]*}|_using_menuconfig:=no}|' PKGBUILD
-            sed -i 's|interactive=.*|interactive=no|' PKGBUILD
-            
-            # --- KERNEL CONFIG ---
+            sed -i 's|interactive=y|interactive=n|g' PKGBUILD
+            sed -i 's|_die "|true; #|g' PKGBUILD
+
+            # --- DIRECT SOURCE INJECTION ---
+            # This forces your Zen4 and O3 flags into the PKGBUILD logic
             sed -i 's|_processor_opt:=[^}]*}|_processor_opt:=znver4}|' PKGBUILD
             sed -i 's|_cflags_O3:=[^}]*}|_cflags_O3:=yes}|' PKGBUILD
             sed -i 's|_use_llvm_lto:=[^}]*}|_use_llvm_lto:=thin}|' PKGBUILD
             sed -i 's|_cpusched:=[^}]*}|_cpusched:=bore}|' PKGBUILD
-            
-            # --- BYPASS CONFLICTS ---
-            sed -i 's|_die "|true; #|g' PKGBUILD
 
-            # --- PRE-CONFIGURING SCHED-EXT ---
-            # We inject the config commands directly into the PKGBUILD prepare function
+            # --- SCHED-EXT & BPF CONFIG INJECTION ---
+            # This ensures the kernel supports the README requirements you shared
             sed -i '/prepare() {/a \
               KDIR=$(find . -maxdepth 1 -type d -name "linux-*" | head -n 1) \
               cd "$KDIR" \
               scripts/config -e BPF \
               scripts/config -e BPF_SYSCALL \
               scripts/config -e BPF_JIT \
+              scripts/config -e BPF_JIT_ALWAYS_ON \
               scripts/config -e DEBUG_INFO_BTF \
+              scripts/config -e DEBUG_INFO_BTF_FEATURES \
               scripts/config -e SCHED_CLASS_EXT \
-              scripts/config --set-str DEFAULT_HOSTNAME "catgirl" \
+              scripts/config -e BPF_EVENTS \
+              make olddefconfig \
               cd ..' PKGBUILD
 
-            # Build it. The yes "" | ensures any hidden prompts get an 'Enter' key.
             export TERM=dumb
-            yes "" | makepkg -scf --noconfirm --skipchecksums
+            makepkg -scf --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
