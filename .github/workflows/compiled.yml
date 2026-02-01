@@ -53,9 +53,10 @@ jobs:
             sed -i 's|_die "|true; #|g' PKGBUILD
 
             # --- INJECT CONFIG FLAGS ---
-            # We use a wildcard 'linux-$_major*' to handle the dot naming quirk safely.
+            # We use find to locate the actual directory (type d) to avoid "too many arguments"
             sed -i '/prepare() {/a \
-              cd "linux-$_major"* \
+              KDIR=$(find . -maxdepth 1 -type d -name "linux-*" | head -n 1) \
+              cd "$KDIR" \
               scripts/config -e BPF \
               scripts/config -e BPF_SYSCALL \
               scripts/config -e BPF_JIT \
