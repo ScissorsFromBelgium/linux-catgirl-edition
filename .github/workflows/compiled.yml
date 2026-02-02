@@ -1,4 +1,4 @@
-name: "Catgirl Edition o (znver4 + 6.19-rc8 + SCX)"
+name: "Catgirl Edition Extreme (znver4 + 6.19.rc8 + SCX)"
 
 on:
   workflow_dispatch:
@@ -39,16 +39,16 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
 
-            # 1. FORCE VERSION TO 6.19-rc8 (Fixes sched-ext hotplug errors)
+            # 1. FORCE VERSION TO 6.19.rc8 (Dot used to pass Arch naming rules)
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
-            sed -i 's/^_minor=.*/_minor=-rc8/' PKGBUILD
+            sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
 
-            # 2. DOWNLOAD FRESH 6.19 PATCHES (Using your links)
+            # 2. DOWNLOAD FRESH 6.19 PATCHES (Your links)
             curl -LO https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/all/0001-cachyos-base-all.patch
             curl -LO https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/misc/dkms-clang.patch
             curl -LO https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/0003-bbr3.patch
 
-            # 3. CONFIGURE ENVIRONMENT & OPTIMIZATIONS
+            # 3. CONFIGURE ENVIRONMENT
             export _processor_opt="znver4"
             export _O3_opt="1"
             export _preempt="full"
@@ -59,11 +59,11 @@ jobs:
             export _unattended_make_prepare="yes"
             export _makenconfig="no"
 
-            # 4. SLEDGEHAMMER PKGBUILD & CONFIG INJECTION
-            # This enables Tracing, BTF, and Sched-ext required for Rust schedulers
+            # 4. INJECT CONFIG FOR SCX & TRACING
+            # We explicitly target the linux-6.19-rc8 folder for the config injection
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
             sed -i '/prepare() {/a \
-              KDIR=$(find . -maxdepth 1 -type d -name "linux-*" | head -n 1) \
+              KDIR=$(find . -maxdepth 1 -type d -name "linux-6.19-rc8" | head -n 1) \
               cd "$KDIR" \
               scripts/config -e BPF_EVENTS \
               scripts/config -e KALLSYMS_ALL \
