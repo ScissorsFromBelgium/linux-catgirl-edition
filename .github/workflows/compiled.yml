@@ -52,23 +52,26 @@ jobs:
             curl -LO https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/misc/dkms-clang.patch
             curl -LO https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/0003-bbr3.patch
 
-            # 4. SET BUILD FLAGS
+            # 4. SET BUILD FLAGS (Using both common naming conventions)
             export _processor_opt="znver4"
             export _O3_opt="1"
             export _preempt="full"
             export _tickrate="1000"
+            export _TICKRATE="1000"
             export _lto_mode="thin"
             export _sched_ext="1"
             export _tcp_bbr3="1"
             export _unattended_make_prepare="yes"
             export _makenconfig="no"
 
-            # 5. INJECT FOLDER FIX & CONFIG GENERATION
+            # 5. INJECT WORKSPACE FIXES & CONFIG
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
             
-            # We inject a fix to create the missing config file the script wants to copy
+            # Force tickrate in the script itself to bypass variable check fails
+            sed -i 's|read -r _tickrate|# read -r _tickrate|g' PKGBUILD
+            
             sed -i '/prepare() {/a \
-              echo "--- REPAIRING WORKSPACE ---" \
+              echo "--- FINAL PREP ---" \
               EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "linux-6.19*" | head -n 1) \
               if [ "$EXTRACTED_DIR" != "./linux-6.19.rc8" ]; then \
                 mv "$EXTRACTED_DIR" linux-6.19.rc8; \
@@ -84,6 +87,10 @@ jobs:
               scripts/config -e DEBUG_INFO_BTF \
               scripts/config -e DEBUG_INFO_BTF_FEATURES \
               scripts/config -e SCHED_CLASS_EXT \
+              scripts/config --set-val HZ 1000 \
+              scripts/config -e HZ_1000 \
+              scripts/config -d HZ_300 \
+              scripts/config -d HZ_250 \
               make olddefconfig \
               cd ..' PKGBUILD
 
