@@ -63,17 +63,17 @@ jobs:
             export _unattended_make_prepare="yes"
             export _makenconfig="no"
 
-            # 5. INJECT LS AND FORCE DIRECTORY ENTRY
-            # We use a broad sed to find any line that says 'cd linux-' and replace it
+            # 5. INJECT FOLDER RENAMING
+            # This identifies the extracted hyphen folder and renames it to the dot version
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
-            sed -i 's|cd linux-.*|echo "DIR LISTING:"; ls -d */ |' PKGBUILD
             
             sed -i '/prepare() {/a \
-              echo "--- CURRENT FILES ---" \
-              ls -F \
-              KDIR=$(find . -maxdepth 1 -type d -name "linux-*" | head -n 1) \
-              echo "Entering $KDIR" \
-              cd "$KDIR" \
+              echo "--- FIXING FOLDER NAMES ---" \
+              EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "linux-6.19*" | head -n 1) \
+              if [ "$EXTRACTED_DIR" != "./linux-6.19.rc8" ]; then \
+                mv "$EXTRACTED_DIR" linux-6.19.rc8; \
+              fi \
+              cd linux-6.19.rc8 \
               scripts/config -e BPF_EVENTS \
               scripts/config -e KALLSYMS_ALL \
               scripts/config -e FUNCTION_TRACER \
