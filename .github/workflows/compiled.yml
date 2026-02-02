@@ -39,19 +39,20 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
 
-            # 1. FORCE VERSION TO 6.19.rc8
+            # 1. SET VERSION (Dot for Arch pkgver compatibility)
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
 
-            # 2. FIX DOWNLOAD URL (CRITICAL: Move to testing folder for RC kernels)
-            sed -i 's|source=(https://cdn.kernel.org/pub/linux/kernel/v${_major%.*}.x/|source=(https://cdn.kernel.org/pub/linux/kernel/v${_major%.*}.x/testing/|' PKGBUILD
+            # 2. FORCE SOURCE TO THE GIT.KERNEL.ORG LINK YOU FOUND
+            # This replaces the entire source array to use the tar.gz link
+            sed -i 's|^source=(.*|source=("https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz"|' PKGBUILD
 
-            # 3. DOWNLOAD FRESH 6.19 PATCHES (Your links)
+            # 3. DOWNLOAD 6.19 PATCHES (CachyOS)
             curl -LO https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/all/0001-cachyos-base-all.patch
             curl -LO https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/misc/dkms-clang.patch
             curl -LO https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/0003-bbr3.patch
 
-            # 4. CONFIGURE ENVIRONMENT
+            # 4. SET BUILD FLAGS
             export _processor_opt="znver4"
             export _O3_opt="1"
             export _preempt="full"
@@ -62,10 +63,11 @@ jobs:
             export _unattended_make_prepare="yes"
             export _makenconfig="no"
 
-            # 5. INJECT CONFIG FOR SCX & TRACING
+            # 5. INJECT SCX/TRACING CONFIG
+            # We target the linux-6.19-rc8 directory created by the tarball
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
             sed -i '/prepare() {/a \
-              KDIR=$(find . -maxdepth 1 -type d -name "linux-6.19-rc8" | head -n 1) \
+              KDIR="linux-6.19-rc8" \
               cd "$KDIR" \
               scripts/config -e BPF_EVENTS \
               scripts/config -e KALLSYMS_ALL \
@@ -78,7 +80,7 @@ jobs:
               make olddefconfig \
               cd ..' PKGBUILD
 
-            # 6. EXECUTE BUILD
+            # 6. RUN BUILD
             export TERM=dumb
             makepkg -scf --noconfirm --skipchecksums
           EOF
