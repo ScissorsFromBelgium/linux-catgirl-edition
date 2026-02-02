@@ -1,4 +1,4 @@
-name: "Catgirl Edition (znver4 + 6.19-rc8 + SCX)"
+name: "Catgirl Edition o (znver4 + 6.19-rc8 + SCX)"
 
 on:
   workflow_dispatch:
