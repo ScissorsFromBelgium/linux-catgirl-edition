@@ -63,13 +63,16 @@ jobs:
             export _unattended_make_prepare="yes"
             export _makenconfig="no"
 
-            # 5. INJECT SCX/TRACING CONFIG & FIX DIR LOGIC
-            # We disable the original cd command and use a variable to find the actual directory
+            # 5. INJECT LS AND FORCE DIRECTORY ENTRY
+            # We use a broad sed to find any line that says 'cd linux-' and replace it
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
-            sed -i 's|cd linux-${_major}${_minor}|# cd handled by injection|g' PKGBUILD
+            sed -i 's|cd linux-.*|echo "DIR LISTING:"; ls -d */ |' PKGBUILD
             
             sed -i '/prepare() {/a \
-              KDIR=$(find . -maxdepth 1 -type d -name "linux-6.19*" | head -n 1) \
+              echo "--- CURRENT FILES ---" \
+              ls -F \
+              KDIR=$(find . -maxdepth 1 -type d -name "linux-*" | head -n 1) \
+              echo "Entering $KDIR" \
               cd "$KDIR" \
               scripts/config -e BPF_EVENTS \
               scripts/config -e KALLSYMS_ALL \
