@@ -39,15 +39,30 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
 
-            # --- FORCE VERSION 6.19.RC8 ---
+            # 1. DOWNLOAD SOURCE MANUALLY
+            echo "--> Downloading Kernel..."
+            curl -L -C - --retry 5 "https://cdn.kernel.org/pub/linux/kernel/v6.x/testing/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
+
+            # 2. MANUALLY EXTRACT AND RENAME (The Fix)
+            echo "--> Pre-extracting kernel to fix folder name..."
+            mkdir -p src
+            tar -xf linux-6.19-rc8.tar.gz -C src/
+            
+            # RENAME: linux-6.19-rc8 -> linux-6.19.rc8
+            # We move it to exactly where the PKGBUILD will look for it
+            mv src/linux-6.19-rc8 src/linux-6.19.rc8
+            echo "--> Directory renamed successfully to src/linux-6.19.rc8"
+
+            # 3. CONFIGURE PKGBUILD
+            # Set versions to match our manual folder name
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
-            
-            # --- FORCE SOURCE URL ---
-            sed -i '/^source=(/,/)/d' PKGBUILD
-            echo 'source=("https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz")' >> PKGBUILD
 
-            # --- ENV VARS FOR CATGIRL PKGBUILD ---
+            # Point source to local file (just to satisfy checks)
+            sed -i '/^source=(/,/)/d' PKGBUILD
+            echo 'source=("linux-6.19-rc8.tar.gz")' >> PKGBUILD
+
+            # 4. SET FLAGS
             export _processor_opt="znver4"
             export _O3_opt="1"
             export _preempt="full"
@@ -58,28 +73,19 @@ jobs:
             export _unattended_make_prepare="yes"
             export _makenconfig="no"
 
-            # --- SLEDGEHAMMER MENU BYPASS ---
+            # Sledgehammer bypasses
             sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
             sed -i 's|_micro_optimize:=[^}]*}|_micro_optimize:=no}|' PKGBUILD
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
             sed -i 's|_die "|true; #|g' PKGBUILD
 
-            # --- DIRECT SOURCE INJECTION ---
+            # Direct flag injections
             sed -i 's|_processor_opt:=[^}]*}|_processor_opt:=znver4}|' PKGBUILD
             sed -i 's|_cflags_O3:=[^}]*}|_cflags_O3:=yes}|' PKGBUILD
             sed -i 's|_use_llvm_lto:=[^}]*}|_use_llvm_lto:=thin}|' PKGBUILD
             sed -i 's|_cpusched:=[^}]*}|_cpusched:=bore}|' PKGBUILD
 
-            # --- CRITICAL FIX: DIRECTORY RENAMER ---
-            # This injects a command at the START of prepare() to rename the folder
-            # from linux-6.19-rc8 (actual) to linux-6.19.rc8 (expected)
-            sed -i '/prepare() {/a \
-              echo "--- FIXING DIRECTORY NAME ---" \
-              [ -d linux-6.19-rc8 ] && mv linux-6.19-rc8 linux-6.19.rc8 \
-              echo "--- DIRECTORY FIXED ---"' PKGBUILD
-
-            # --- SCHED-EXT & BPF CONFIG INJECTION ---
-            # Now we can safely use the expected dot-naming
+            # 5. INJECT KERNEL CONFIG (Now safe because folder exists)
             sed -i '/prepare() {/a \
               cd linux-6.19.rc8 \
               scripts/config -e BPF \
@@ -96,7 +102,10 @@ jobs:
               cd ..' PKGBUILD
 
             export TERM=dumb
-            makepkg -scf --noconfirm --skipchecksums
+            
+            # 6. RUN MAKEPKG WITH NO EXTRACT (--noextract / -e)
+            # This uses our manually renamed folder in src/
+            makepkg -se --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
