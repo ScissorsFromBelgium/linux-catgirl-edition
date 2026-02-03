@@ -64,14 +64,24 @@ jobs:
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
             sed -i 's|_die "|true; #|g' PKGBUILD
 
-            # --- FIX THE DIRECTORY PATH ERROR ---
-            # This replaces the literal "cd linux-6.19.rc8" with a wildcard search
-            sed -i 's|cd "linux-$_major$_minor"|cd linux-6.19*|g' PKGBUILD
+            # --- DIRECT SOURCE INJECTION ---
+            sed -i 's|_processor_opt:=[^}]*}|_processor_opt:=znver4}|' PKGBUILD
+            sed -i 's|_cflags_O3:=[^}]*}|_cflags_O3:=yes}|' PKGBUILD
+            sed -i 's|_use_llvm_lto:=[^}]*}|_use_llvm_lto:=thin}|' PKGBUILD
+            sed -i 's|_cpusched:=[^}]*}|_cpusched:=bore}|' PKGBUILD
+
+            # --- CRITICAL FIX: DIRECTORY RENAMER ---
+            # This injects a command at the START of prepare() to rename the folder
+            # from linux-6.19-rc8 (actual) to linux-6.19.rc8 (expected)
+            sed -i '/prepare() {/a \
+              echo "--- FIXING DIRECTORY NAME ---" \
+              [ -d linux-6.19-rc8 ] && mv linux-6.19-rc8 linux-6.19.rc8 \
+              echo "--- DIRECTORY FIXED ---"' PKGBUILD
 
             # --- SCHED-EXT & BPF CONFIG INJECTION ---
+            # Now we can safely use the expected dot-naming
             sed -i '/prepare() {/a \
-              KDIR=$(find . -maxdepth 1 -type d -name "linux-6.19*" | head -n 1) \
-              cd "$KDIR" \
+              cd linux-6.19.rc8 \
               scripts/config -e BPF \
               scripts/config -e BPF_SYSCALL \
               scripts/config -e BPF_JIT \
