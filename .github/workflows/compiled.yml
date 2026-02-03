@@ -59,7 +59,7 @@ jobs:
             patch -p1 < ../../base.patch
             patch -p1 < ../../dkms.patch
 
-            # 4. PRE-GENERATE THE CONFIG (BTF DISABLED TO PREVENT CRASH)
+            # 4. PRE-GENERATE THE CONFIG
             echo "--> Configuring Kernel..."
             make defconfig
             scripts/config -e BPF -e BPF_SYSCALL -e BPF_JIT -e BPF_JIT_ALWAYS_ON \
@@ -73,12 +73,16 @@ jobs:
             cp .config ../../config
             cd ../..
 
-            # 5. CONFIGURE PKGBUILD
+            # 5. CONFIGURE PKGBUILD (NUCLEAR FIX FOR BTF)
+            echo "--> Patching PKGBUILD..."
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
 
+            # This line forces the PKGBUILD to disable BTF even if it wants it
+            sed -i 's/scripts\/config -e DEBUG_INFO_BTF/scripts\/config -d DEBUG_INFO_BTF/g' PKGBUILD
+            
             # Flags and Bypasses
             export _processor_opt="znver4"
             export _O3_opt="1"
@@ -91,7 +95,7 @@ jobs:
 
             # 6. RUN MAKEPKG
             export TERM=dumb
-            # -e: use existing src, -f: force
+            # We use --nodeps and -e to ensure our patched source/config stays put
             makepkg -sef --noconfirm --skipchecksums
           EOF
 
