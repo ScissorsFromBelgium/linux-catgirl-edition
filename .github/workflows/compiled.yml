@@ -59,7 +59,7 @@ jobs:
             patch -p1 < ../../base.patch
             patch -p1 < ../../dkms.patch
 
-            # 4. PRE-GENERATE THE CONFIG (FIXED: Disabled BTF to prevent crash)
+            # 4. PRE-GENERATE THE CONFIG (BTF DISABLED TO PREVENT CRASH)
             echo "--> Configuring Kernel..."
             make defconfig
             scripts/config -e BPF -e BPF_SYSCALL -e BPF_JIT -e BPF_JIT_ALWAYS_ON \
@@ -91,6 +91,7 @@ jobs:
 
             # 6. RUN MAKEPKG
             export TERM=dumb
+            # -e: use existing src, -f: force
             makepkg -sef --noconfirm --skipchecksums
           EOF
 
