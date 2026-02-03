@@ -73,20 +73,27 @@ jobs:
             cp .config ../../config
             cd ../..
 
-            # 5. CONFIGURE PKGBUILD
+            # 5. CONFIGURE PKGBUILD (NUKE BPF TOOLS)
             echo "--> Patching PKGBUILD..."
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
 
-            # Explicitly FORCE OFF BTF in PKGBUILD just in case
+            # --- THE FIX: Delete lines that build/install bpftool or vmlinux.h ---
+            # This prevents the "failed to find .BTF" error by skipping the tool entirely
+            sed -i '/bpftool/d' PKGBUILD
+            sed -i '/vmlinux.h/d' PKGBUILD
+            sed -i '/tools\/bpf/d' PKGBUILD
+            # ---------------------------------------------------------------------
+
+            # Force BTF off in PKGBUILD logic too
             sed -i 's/scripts\/config -e DEBUG_INFO_BTF/scripts\/config -d DEBUG_INFO_BTF/g' PKGBUILD
 
-            # Flags and Bypasses (sched_ext removed)
+            # Flags and Bypasses
             export _processor_opt="znver4"
             export _O3_opt="1"
-            export _sched_ext="0" 
+            export _sched_ext="0"
             export _tcp_bbr3="1"
             
             sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
