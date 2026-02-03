@@ -1,4 +1,34 @@
-- name: Build linux-catgirl-edition
+name: "Catgirl Edition Extreme"
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+    name: Build and Package
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --privileged
+
+    steps:
+      - name: Maximize build space
+        run: |
+          rm -rf /usr/share/dotnet
+          rm -rf /usr/local/lib/android
+          rm -rf /opt/ghc
+
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo ncurses curl
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build linux-catgirl-edition
         run: |
           useradd -m builduser
           chown -R builduser:builduser .
@@ -29,7 +59,7 @@
             patch -p1 < ../../base.patch
             patch -p1 < ../../dkms.patch
 
-            # 4. CONFIGURE KERNEL (BTF DISABLED TO PREVENT CRASH)
+            # 4. PRE-GENERATE THE CONFIG (BTF DISABLED TO PREVENT CRASH)
             echo "--> Configuring Kernel..."
             make defconfig
             scripts/config -e BPF -e BPF_SYSCALL -e BPF_JIT -e BPF_JIT_ALWAYS_ON \
@@ -40,7 +70,6 @@
                            -e LRU_GEN -e LRU_GEN_ENABLED
             
             make olddefconfig
-            # Copy this config back so makepkg sees it
             cp .config ../../config
             cd ../..
 
@@ -62,6 +91,15 @@
 
             # 6. RUN MAKEPKG
             export TERM=dumb
-            # -e: use existing src, -f: force
             makepkg -sef --noconfirm --skipchecksums
           EOF
+
+      - name: Prepare and Upload Artifacts
+        run: |
+          zip linux-catgirl-6.19-znver4-extreme.zip *.pkg.tar.zst
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-catgirl-extreme-patched
+          path: linux-catgirl-6.19-znver4-extreme.zip
