@@ -44,22 +44,20 @@ jobs:
             curl -L "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
             curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/all/0001-cachyos-base-all.patch" -o base.patch
             curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/misc/dkms-clang.patch" -o dkms.patch
-            curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/0003-bbr3.patch" -o bbr3.patch
 
             # 2. EXTRACT AND RENAME
             echo "--> Extracting..."
-            rm -rf src/ # Clean start for patches
+            rm -rf src/
             mkdir -p src
             tar -xf linux-6.19-rc8.tar.gz -C src/
             ROOT_FOLDER=$(tar -tf linux-6.19-rc8.tar.gz | head -1 | cut -f1 -d"/")
             mv "src/$ROOT_FOLDER" src/linux-6.19.rc8
 
-            # 3. APPLY PATCHES
-            echo "--> Applying CachyOS and BBR3 patches..."
+            # 3. APPLY PATCHES (Removed redundant BBR3 as it's in Cachy Base)
+            echo "--> Applying CachyOS patches..."
             cd src/linux-6.19.rc8
             patch -p1 < ../../base.patch
             patch -p1 < ../../dkms.patch
-            patch -p1 < ../../bbr3.patch
 
             # 4. PRE-GENERATE THE CONFIG
             echo "--> Configuring Kernel..."
@@ -68,7 +66,8 @@ jobs:
                            -e DEBUG_INFO_BTF -e DEBUG_INFO_BTF_FEATURES \
                            -e SCHED_CLASS_EXT -e BPF_EVENTS \
                            -e TCP_CONG_BBR3 -e DEFAULT_BBR3 \
-                           --set-val HZ 1000 -e HZ_1000
+                           --set-val HZ 1000 -e HZ_1000 \
+                           -e LRU_GEN -e LRU_GEN_ENABLED
             
             make olddefconfig
             cd ../..
@@ -91,16 +90,16 @@ jobs:
 
             # 6. RUN MAKEPKG
             export TERM=dumb
-            # -e: use existing src, -f: force, -s: deps
+            # -e: use existing src, -f: force
             makepkg -sef --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
         run: |
-          zip linux-catgirl-6.19-znver4-patched.zip *.pkg.tar.zst
+          zip linux-catgirl-6.19-znver4-extreme.zip *.pkg.tar.zst
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-catgirl-extreme-patched
-          path: linux-catgirl-6.19-znver4-patched.zip
+          path: linux-catgirl-6.19-znver4-extreme.zip
