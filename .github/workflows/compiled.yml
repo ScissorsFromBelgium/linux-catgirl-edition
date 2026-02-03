@@ -39,12 +39,11 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
 
-            # --- HIJACK VERSION TO 6.19.RC8 ---
+            # --- FORCE VERSION 6.19.RC8 ---
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
-            # --- OVERWRITE SOURCE ARRAY ---
-            # We point to the official testing tarball
+            # --- FORCE SOURCE URL ---
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz")' >> PKGBUILD
 
@@ -65,14 +64,8 @@ jobs:
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
             sed -i 's|_die "|true; #|g' PKGBUILD
 
-            # --- DIRECT SOURCE INJECTION ---
-            sed -i 's|_processor_opt:=[^}]*}|_processor_opt:=znver4}|' PKGBUILD
-            sed -i 's|_cflags_O3:=[^}]*}|_cflags_O3:=yes}|' PKGBUILD
-            sed -i 's|_use_llvm_lto:=[^}]*}|_use_llvm_lto:=thin}|' PKGBUILD
-            sed -i 's|_cpusched:=[^}]*}|_cpusched:=bore}|' PKGBUILD
-
-            # --- DYNAMIC PATH FIX ---
-            # This replaces the specific 'cd' command in your PKGBUILD with a wildcard search
+            # --- FIX THE DIRECTORY PATH ERROR ---
+            # This replaces the literal "cd linux-6.19.rc8" with a wildcard search
             sed -i 's|cd "linux-$_major$_minor"|cd linux-6.19*|g' PKGBUILD
 
             # --- SCHED-EXT & BPF CONFIG INJECTION ---
