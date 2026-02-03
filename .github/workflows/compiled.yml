@@ -1,4 +1,4 @@
-name: "Catgirl Edition Extreme (znver4 + 6.19.rc8 + sched-ext)"
+name: "Catgirl Edition Extreme (znver4 + 6.19.rc8 + Patched)"
 
 on:
   workflow_dispatch:
@@ -39,72 +39,68 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
 
-            # 1. DOWNLOAD
-            echo "--> Downloading Kernel..."
-            curl -L -C - --retry 5 "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
+            # 1. DOWNLOAD KERNEL & PATCHES
+            echo "--> Downloading Kernel and Patches..."
+            curl -L "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
+            curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/all/0001-cachyos-base-all.patch" -o base.patch
+            curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/misc/dkms-clang.patch" -o dkms.patch
+            curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/0003-bbr3.patch" -o bbr3.patch
 
             # 2. EXTRACT AND RENAME
-            echo "--> Extracting and fixing directory..."
+            echo "--> Extracting..."
+            rm -rf src/ # Clean start for patches
             mkdir -p src
             tar -xf linux-6.19-rc8.tar.gz -C src/
             ROOT_FOLDER=$(tar -tf linux-6.19-rc8.tar.gz | head -1 | cut -f1 -d"/")
             mv "src/$ROOT_FOLDER" src/linux-6.19.rc8
 
-            # 3. PRE-GENERATE THE CONFIG (The Fix)
-            # We do this OUTSIDE of makepkg to ensure it exists
-            echo "--> Pre-generating .config..."
+            # 3. APPLY PATCHES
+            echo "--> Applying CachyOS and BBR3 patches..."
             cd src/linux-6.19.rc8
+            patch -p1 < ../../base.patch
+            patch -p1 < ../../dkms.patch
+            patch -p1 < ../../bbr3.patch
+
+            # 4. PRE-GENERATE THE CONFIG
+            echo "--> Configuring Kernel..."
             make defconfig
-            
-            # Apply your Extreme optimizations
-            scripts/config -e BPF \
-                           -e BPF_SYSCALL \
-                           -e BPF_JIT \
-                           -e BPF_JIT_ALWAYS_ON \
-                           -e DEBUG_INFO_BTF \
-                           -e DEBUG_INFO_BTF_FEATURES \
-                           -e SCHED_CLASS_EXT \
-                           -e BPF_EVENTS \
-                           --set-val HZ 1000 \
-                           -e HZ_1000
+            scripts/config -e BPF -e BPF_SYSCALL -e BPF_JIT -e BPF_JIT_ALWAYS_ON \
+                           -e DEBUG_INFO_BTF -e DEBUG_INFO_BTF_FEATURES \
+                           -e SCHED_CLASS_EXT -e BPF_EVENTS \
+                           -e TCP_CONG_BBR3 -e DEFAULT_BBR3 \
+                           --set-val HZ 1000 -e HZ_1000
             
             make olddefconfig
             cd ../..
 
-            # 4. CONFIGURE PKGBUILD
+            # 5. CONFIGURE PKGBUILD
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz")' >> PKGBUILD
 
-            # 5. SET FLAGS
+            # Flags and Bypasses
             export _processor_opt="znver4"
             export _O3_opt="1"
-            export _preempt="full"
-            export _tickrate="1000"
-            export _lto_mode="thin"
             export _sched_ext="1"
             export _tcp_bbr3="1"
-            export _unattended_make_prepare="yes"
-            export _makenconfig="no"
-
-            # Sledgehammer bypasses to stop PKGBUILD from trying to re-config
+            
             sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
             sed -i 's|_die "|true; #|g' PKGBUILD
 
             # 6. RUN MAKEPKG
             export TERM=dumb
-            # -e uses our prepared src, -f forces build
+            # -e: use existing src, -f: force, -s: deps
             makepkg -sef --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
         run: |
-          zip linux-catgirl-6.19-znver4.zip *.pkg.tar.zst
+          zip linux-catgirl-6.19-znver4-patched.zip *.pkg.tar.zst
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-catgirl-extreme-znver4
-          path: linux-catgirl-6.19-znver4.zip
+          name: linux-catgirl-extreme-patched
+          path: linux-catgirl-6.19-znver4-patched.zip
