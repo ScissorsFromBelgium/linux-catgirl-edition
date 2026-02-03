@@ -39,25 +39,45 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
 
-            # 1. DOWNLOAD FROM GIT
-            echo "--> Downloading Kernel from Git..."
+            # 1. DOWNLOAD
+            echo "--> Downloading Kernel..."
             curl -L -C - --retry 5 "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
 
-            # 2. MANUALLY EXTRACT AND RENAME
-            echo "--> Pre-extracting..."
+            # 2. EXTRACT AND RENAME
+            echo "--> Extracting and fixing directory..."
             mkdir -p src
             tar -xf linux-6.19-rc8.tar.gz -C src/
             ROOT_FOLDER=$(tar -tf linux-6.19-rc8.tar.gz | head -1 | cut -f1 -d"/")
             mv "src/$ROOT_FOLDER" src/linux-6.19.rc8
-            echo "--> Directory fixed: src/linux-6.19.rc8"
 
-            # 3. CONFIGURE PKGBUILD VERSIONS
+            # 3. PRE-GENERATE THE CONFIG (The Fix)
+            # We do this OUTSIDE of makepkg to ensure it exists
+            echo "--> Pre-generating .config..."
+            cd src/linux-6.19.rc8
+            make defconfig
+            
+            # Apply your Extreme optimizations
+            scripts/config -e BPF \
+                           -e BPF_SYSCALL \
+                           -e BPF_JIT \
+                           -e BPF_JIT_ALWAYS_ON \
+                           -e DEBUG_INFO_BTF \
+                           -e DEBUG_INFO_BTF_FEATURES \
+                           -e SCHED_CLASS_EXT \
+                           -e BPF_EVENTS \
+                           --set-val HZ 1000 \
+                           -e HZ_1000
+            
+            make olddefconfig
+            cd ../..
+
+            # 4. CONFIGURE PKGBUILD
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz")' >> PKGBUILD
 
-            # 4. SET CATGIRL FLAGS
+            # 5. SET FLAGS
             export _processor_opt="znver4"
             export _O3_opt="1"
             export _preempt="full"
@@ -68,38 +88,15 @@ jobs:
             export _unattended_make_prepare="yes"
             export _makenconfig="no"
 
-            # Sledgehammer bypasses
+            # Sledgehammer bypasses to stop PKGBUILD from trying to re-config
             sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
-            sed -i 's|_micro_optimize:=[^}]*}|_micro_optimize:=no}|' PKGBUILD
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
             sed -i 's|_die "|true; #|g' PKGBUILD
-            sed -i 's|_processor_opt:=[^}]*}|_processor_opt:=znver4}|' PKGBUILD
-            sed -i 's|_cflags_O3:=[^}]*}|_cflags_O3:=yes}|' PKGBUILD
-            sed -i 's|_use_llvm_lto:=[^}]*}|_use_llvm_lto:=thin}|' PKGBUILD
-            sed -i 's|_cpusched:=[^}]*}|_cpusched:=bore}|' PKGBUILD
 
-            # 5. INJECT CONFIG GENERATION (The Fix)
-            # This ensures a .config is created before the build starts
-            sed -i '/prepare() {/a \
-              cd linux-6.19.rc8 \
-              echo "--> Generating default config..." \
-              make clean && make defconfig \
-              scripts/config -e BPF \
-              scripts/config -e BPF_SYSCALL \
-              scripts/config -e BPF_JIT \
-              scripts/config -e BPF_JIT_ALWAYS_ON \
-              scripts/config -e DEBUG_INFO_BTF \
-              scripts/config -e DEBUG_INFO_BTF_FEATURES \
-              scripts/config -e SCHED_CLASS_EXT \
-              scripts/config -e BPF_EVENTS \
-              scripts/config --set-val HZ 1000 \
-              scripts/config -e HZ_1000 \
-              make olddefconfig \
-              cd ..' PKGBUILD
-
+            # 6. RUN MAKEPKG
             export TERM=dumb
-            # Run with -e to use our prepared src/ folder
-            makepkg -se --noconfirm --skipchecksums
+            # -e uses our prepared src, -f forces build
+            makepkg -sef --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
