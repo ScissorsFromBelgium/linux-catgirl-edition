@@ -39,30 +39,45 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
 
-            # 1. DOWNLOAD SOURCE MANUALLY
-            echo "--> Downloading Kernel..."
-            curl -L -C - --retry 5 "https://cdn.kernel.org/pub/linux/kernel/v6.x/testing/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
+            # 1. DOWNLOAD FROM GIT SNAPSHOT (Guaranteed to exist)
+            echo "--> Downloading Kernel from Git..."
+            # We use the snapshot link which is always valid for tags
+            curl -L -C - --retry 5 "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
 
-            # 2. MANUALLY EXTRACT AND RENAME (The Fix)
-            echo "--> Pre-extracting kernel to fix folder name..."
+            # 2. VALIDATE DOWNLOAD
+            # If file is smaller than 10MB, it's an error page. Fail now.
+            filesize=$(stat -c%s "linux-6.19-rc8.tar.gz")
+            if (( filesize < 10000000 )); then
+              echo "Error: Downloaded file is too small ($filesize bytes). Likely a 404."
+              cat linux-6.19-rc8.tar.gz
+              exit 1
+            fi
+
+            # 3. MANUALLY EXTRACT AND RENAME
+            # We find out exactly what the folder is named inside the tarball
+            echo "--> Detecting folder name..."
+            ROOT_FOLDER=$(tar -tf linux-6.19-rc8.tar.gz | head -1 | cut -f1 -d"/")
+            echo "--> Tarball contains folder: $ROOT_FOLDER"
+
+            echo "--> Extracting..."
             mkdir -p src
             tar -xf linux-6.19-rc8.tar.gz -C src/
             
-            # RENAME: linux-6.19-rc8 -> linux-6.19.rc8
-            # We move it to exactly where the PKGBUILD will look for it
-            mv src/linux-6.19-rc8 src/linux-6.19.rc8
-            echo "--> Directory renamed successfully to src/linux-6.19.rc8"
+            # RENAME to match PKGBUILD expectation (linux-6.19.rc8)
+            if [ "$ROOT_FOLDER" != "linux-6.19.rc8" ]; then
+                echo "--> Renaming $ROOT_FOLDER to linux-6.19.rc8"
+                mv "src/$ROOT_FOLDER" src/linux-6.19.rc8
+            fi
 
-            # 3. CONFIGURE PKGBUILD
-            # Set versions to match our manual folder name
+            # 4. CONFIGURE PKGBUILD
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
 
-            # Point source to local file (just to satisfy checks)
+            # Point source to local file
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz")' >> PKGBUILD
 
-            # 4. SET FLAGS
+            # 5. SET FLAGS & BYPASS
             export _processor_opt="znver4"
             export _O3_opt="1"
             export _preempt="full"
@@ -73,19 +88,16 @@ jobs:
             export _unattended_make_prepare="yes"
             export _makenconfig="no"
 
-            # Sledgehammer bypasses
             sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
             sed -i 's|_micro_optimize:=[^}]*}|_micro_optimize:=no}|' PKGBUILD
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
             sed -i 's|_die "|true; #|g' PKGBUILD
-
-            # Direct flag injections
             sed -i 's|_processor_opt:=[^}]*}|_processor_opt:=znver4}|' PKGBUILD
             sed -i 's|_cflags_O3:=[^}]*}|_cflags_O3:=yes}|' PKGBUILD
             sed -i 's|_use_llvm_lto:=[^}]*}|_use_llvm_lto:=thin}|' PKGBUILD
             sed -i 's|_cpusched:=[^}]*}|_cpusched:=bore}|' PKGBUILD
 
-            # 5. INJECT KERNEL CONFIG (Now safe because folder exists)
+            # 6. INJECT KERNEL CONFIG
             sed -i '/prepare() {/a \
               cd linux-6.19.rc8 \
               scripts/config -e BPF \
@@ -103,8 +115,7 @@ jobs:
 
             export TERM=dumb
             
-            # 6. RUN MAKEPKG WITH NO EXTRACT (--noextract / -e)
-            # This uses our manually renamed folder in src/
+            # 7. RUN MAKEPKG WITH NO EXTRACT (-e)
             makepkg -se --noconfirm --skipchecksums
           EOF
 
