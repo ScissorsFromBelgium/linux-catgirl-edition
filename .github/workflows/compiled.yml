@@ -59,7 +59,7 @@ jobs:
             patch -p1 < ../../base.patch
             patch -p1 < ../../dkms.patch
 
-            # 4. PRE-GENERATE THE CONFIG
+            # 4. PRE-GENERATE THE CONFIG (FORCE BTF OFF)
             echo "--> Configuring Kernel..."
             make defconfig
             scripts/config -e BPF -e BPF_SYSCALL -e BPF_JIT -e BPF_JIT_ALWAYS_ON \
@@ -70,19 +70,22 @@ jobs:
                            -e LRU_GEN -e LRU_GEN_ENABLED
             
             make olddefconfig
+            # Copy config to root so PKGBUILD can't miss it
             cp .config ../../config
             cd ../..
 
-            # 5. CONFIGURE PKGBUILD (NUCLEAR BTF BYPASS)
-            echo "--> Patching PKGBUILD..."
+            # 5. HARD-PATCH PKGBUILD
+            echo "--> Nuking BTF from PKGBUILD..."
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
+            
+            # This line finds any command trying to enable BTF in the PKGBUILD and forces it to disable instead
+            sed -i 's/scripts\/config -e DEBUG_INFO_BTF/scripts\/config -d DEBUG_INFO_BTF/g' PKGBUILD
+            sed -i 's/scripts\/config --enable DEBUG_INFO_BTF/scripts\/config --disable DEBUG_INFO_BTF/g' PKGBUILD
+
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
 
-            # This line finds any enable-BTF command in the PKGBUILD and disables it
-            sed -i 's/scripts\/config -e DEBUG_INFO_BTF/scripts\/config -d DEBUG_INFO_BTF/g' PKGBUILD
-            
             # Flags and Bypasses
             export _processor_opt="znver4"
             export _O3_opt="1"
@@ -93,9 +96,8 @@ jobs:
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
             sed -i 's|_die "|true; #|g' PKGBUILD
 
-            # 6. RUN MAKEPKG
+            # 6. RUN MAKEPKG (Using -e to skip re-extracting)
             export TERM=dumb
-            # -e skips the extract/prepare phase since we did it manually
             makepkg -sef --noconfirm --skipchecksums
           EOF
 
