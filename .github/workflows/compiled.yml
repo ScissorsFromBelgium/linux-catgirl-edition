@@ -44,6 +44,7 @@ jobs:
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
             # --- OVERWRITE SOURCE ARRAY ---
+            # We point to the official testing tarball
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz")' >> PKGBUILD
 
@@ -70,10 +71,13 @@ jobs:
             sed -i 's|_use_llvm_lto:=[^}]*}|_use_llvm_lto:=thin}|' PKGBUILD
             sed -i 's|_cpusched:=[^}]*}|_cpusched:=bore}|' PKGBUILD
 
+            # --- DYNAMIC PATH FIX ---
+            # This replaces the specific 'cd' command in your PKGBUILD with a wildcard search
+            sed -i 's|cd "linux-$_major$_minor"|cd linux-6.19*|g' PKGBUILD
+
             # --- SCHED-EXT & BPF CONFIG INJECTION ---
-            # Using find here ensures we enter the correct extracted folder regardless of name
             sed -i '/prepare() {/a \
-              KDIR=$(find . -maxdepth 1 -type d -name "linux-*" | head -n 1) \
+              KDIR=$(find . -maxdepth 1 -type d -name "linux-6.19*" | head -n 1) \
               cd "$KDIR" \
               scripts/config -e BPF \
               scripts/config -e BPF_SYSCALL \
@@ -89,7 +93,6 @@ jobs:
               cd ..' PKGBUILD
 
             export TERM=dumb
-            # --skipchecksums is vital because we changed the source URL manually
             makepkg -scf --noconfirm --skipchecksums
           EOF
 
