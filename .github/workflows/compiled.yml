@@ -23,6 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
+          # Added 'ncurses' and 'libncurses' explicitly
           pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo ncurses curl
 
       - name: Checkout repository
@@ -52,16 +53,13 @@ jobs:
             curl -LO https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/misc/dkms-clang.patch
             curl -LO https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/0003-bbr3.patch
 
-            # 4. DISARM PKGBUILD VALIDATION
-            # Turn interactive mode off
-            sed -i 's|interactive=y|interactive=n|g' PKGBUILD
-            # Neutralize the specific error function that was breaking
-            sed -i 's|exit 1|return 0 2>/dev/null \|\| exit 0|g' PKGBUILD
-            # Comment out the specific tickrate read/check lines
-            sed -i 's|read -r _tickrate|#|g' PKGBUILD
+            # 4. FORCE DISABLE ALL INTERACTIVE MENUS
+            # This is likely why it hung - it was waiting for a human to exit nconfig
+            sed -i 's/: "${_makenconfig:=yes}"/: "${_makenconfig:=no}"/g' PKGBUILD
+            sed -i 's/: "${_localmodcfg:=yes}"/: "${_localmodcfg:=no}"/g' PKGBUILD
+            sed -i 's/interactive=y/interactive=n/g' PKGBUILD
             
             # 5. INJECT WORKSPACE FIXES
-            # We use a very clean insertion here
             sed -i '/prepare() {/a \
               echo "--- REPAIRING SOURCE ---" \
               EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "linux-6.19*" | head -n 1) \
@@ -84,20 +82,22 @@ jobs:
               make olddefconfig \
               cd ..' PKGBUILD
 
-            # 6. RUN BUILD
+            # 6. RUN BUILD WITH PRE-DEFINED VARS
             export TERM=dumb
+            # Defining these here as exports forces the PKGBUILD to use them
             export _processor_opt="znver4"
             export _tickrate="1000"
             export _preempt="full"
-            
-            # Show the first part of PKGBUILD for debugging if it fails
-            head -n 100 PKGBUILD
-            
+            export _cpusched="bore"
+            export _lto_mode="thin"
+            export _sched_ext="1"
+
             makepkg -scf --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
         run: |
+          # The asterisk finds whatever the final filename is
           zip linux-catgirl-6.19-znver4.zip *.pkg.tar.zst
           
       - name: Upload artifact
