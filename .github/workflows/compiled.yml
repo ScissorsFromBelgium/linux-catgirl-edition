@@ -39,45 +39,25 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
 
-            # 1. DOWNLOAD FROM GIT SNAPSHOT (Guaranteed to exist)
+            # 1. DOWNLOAD FROM GIT
             echo "--> Downloading Kernel from Git..."
-            # We use the snapshot link which is always valid for tags
             curl -L -C - --retry 5 "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
 
-            # 2. VALIDATE DOWNLOAD
-            # If file is smaller than 10MB, it's an error page. Fail now.
-            filesize=$(stat -c%s "linux-6.19-rc8.tar.gz")
-            if (( filesize < 10000000 )); then
-              echo "Error: Downloaded file is too small ($filesize bytes). Likely a 404."
-              cat linux-6.19-rc8.tar.gz
-              exit 1
-            fi
-
-            # 3. MANUALLY EXTRACT AND RENAME
-            # We find out exactly what the folder is named inside the tarball
-            echo "--> Detecting folder name..."
-            ROOT_FOLDER=$(tar -tf linux-6.19-rc8.tar.gz | head -1 | cut -f1 -d"/")
-            echo "--> Tarball contains folder: $ROOT_FOLDER"
-
-            echo "--> Extracting..."
+            # 2. MANUALLY EXTRACT AND RENAME
+            echo "--> Pre-extracting..."
             mkdir -p src
             tar -xf linux-6.19-rc8.tar.gz -C src/
-            
-            # RENAME to match PKGBUILD expectation (linux-6.19.rc8)
-            if [ "$ROOT_FOLDER" != "linux-6.19.rc8" ]; then
-                echo "--> Renaming $ROOT_FOLDER to linux-6.19.rc8"
-                mv "src/$ROOT_FOLDER" src/linux-6.19.rc8
-            fi
+            ROOT_FOLDER=$(tar -tf linux-6.19-rc8.tar.gz | head -1 | cut -f1 -d"/")
+            mv "src/$ROOT_FOLDER" src/linux-6.19.rc8
+            echo "--> Directory fixed: src/linux-6.19.rc8"
 
-            # 4. CONFIGURE PKGBUILD
+            # 3. CONFIGURE PKGBUILD VERSIONS
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
-
-            # Point source to local file
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz")' >> PKGBUILD
 
-            # 5. SET FLAGS & BYPASS
+            # 4. SET CATGIRL FLAGS
             export _processor_opt="znver4"
             export _O3_opt="1"
             export _preempt="full"
@@ -88,6 +68,7 @@ jobs:
             export _unattended_make_prepare="yes"
             export _makenconfig="no"
 
+            # Sledgehammer bypasses
             sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
             sed -i 's|_micro_optimize:=[^}]*}|_micro_optimize:=no}|' PKGBUILD
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
@@ -97,9 +78,12 @@ jobs:
             sed -i 's|_use_llvm_lto:=[^}]*}|_use_llvm_lto:=thin}|' PKGBUILD
             sed -i 's|_cpusched:=[^}]*}|_cpusched:=bore}|' PKGBUILD
 
-            # 6. INJECT KERNEL CONFIG
+            # 5. INJECT CONFIG GENERATION (The Fix)
+            # This ensures a .config is created before the build starts
             sed -i '/prepare() {/a \
               cd linux-6.19.rc8 \
+              echo "--> Generating default config..." \
+              make clean && make defconfig \
               scripts/config -e BPF \
               scripts/config -e BPF_SYSCALL \
               scripts/config -e BPF_JIT \
@@ -114,8 +98,7 @@ jobs:
               cd ..' PKGBUILD
 
             export TERM=dumb
-            
-            # 7. RUN MAKEPKG WITH NO EXTRACT (-e)
+            # Run with -e to use our prepared src/ folder
             makepkg -se --noconfirm --skipchecksums
           EOF
 
