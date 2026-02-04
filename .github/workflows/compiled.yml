@@ -73,21 +73,21 @@ jobs:
             cp .config ../../config
             cd ../..
 
-            # 5. CONFIGURE PKGBUILD (Safe Nuke)
+            # 5. CONFIGURE PKGBUILD
             echo "--> Patching PKGBUILD..."
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
 
-            # --- THE FIX: Replace problematic lines with 'true' to preserve syntax ---
-            # Using 'true' keeps the 'if/fi' blocks valid but does nothing
-            sed -i 's/.*bpftool.*/true/g' PKGBUILD
-            sed -i 's/.*vmlinux.h.*/true/g' PKGBUILD
-            sed -i 's/.*tools\/bpf.*/true/g' PKGBUILD
-            # -------------------------------------------------------------------------
+            # --- THE FIX: Instead of deleting or replacing, append "|| true" ---
+            # This ensures that even if bpftool fails, it doesn't stop the build.
+            # It also preserves the indentation and structure so Bash doesn't throw a syntax error.
+            sed -i '/bpftool/ s/$/ || true/' PKGBUILD
+            sed -i '/vmlinux.h/ s/$/ || true/' PKGBUILD
+            # ------------------------------------------------------------------
 
-            # Force BTF off in PKGBUILD logic too
+            # Ensure BTF is disabled in PKGBUILD script as well
             sed -i 's/scripts\/config -e DEBUG_INFO_BTF/scripts\/config -d DEBUG_INFO_BTF/g' PKGBUILD
 
             # Flags and Bypasses
