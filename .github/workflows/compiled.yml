@@ -81,19 +81,19 @@ jobs:
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
 
-            # Bypass BPF tool errors
-            sed -i '/bpftool/ s/$/ || true/' PKGBUILD
-            sed -i '/vmlinux.h/ s/$/ || true/' PKGBUILD
+            # Bypass BPF tool errors - Using '#' as delimiter to be extra safe
+            sed -i 's#bpftool#bpftool || true#g' PKGBUILD
+            sed -i 's#vmlinux.h#vmlinux.h || true#g' PKGBUILD
             
-            # HARDCODE VERSIONING TO PREVENT //build ERRORS
-            sed -i 's/pkgbase=linux-catgirl-edition/pkgbase=linux-catgirl-edition\n_kernver=6.19.0-rc8/' PKGBUILD
+            # HARDCODE VERSIONING
+            # We insert the version right at the top so every function can see it
+            sed -i 's/pkgbase=linux-catgirl-edition/pkgbase=linux-catgirl-edition\n_kernver=6.19.0-rc8/g' PKGBUILD
             
-            # FORCE PATHS IN THE PACKAGE FUNCTION
-            # This targets the exact line that failed in your last log
-            sed -i 's|rm "${pkgdir}/usr/lib/modules/${_kernver}/build"|rm -rf "${pkgdir}/usr/lib/modules/6.19.0-rc8/build" || true|' PKGBUILD
-            sed -i 's|rm "${pkgdir}/usr/lib/modules/${_kernver}/source"|rm -rf "${pkgdir}/usr/lib/modules/6.19.0-rc8/source" || true|' PKGBUILD
+            # FORCE PATHS - Using '@' as delimiter to avoid clash with '||'
+            sed -i 's@rm "${pkgdir}/usr/lib/modules/${_kernver}/build"@rm -rf "${pkgdir}/usr/lib/modules/6.19.0-rc8/build" || true@' PKGBUILD
+            sed -i 's@rm "${pkgdir}/usr/lib/modules/${_kernver}/source"@rm -rf "${pkgdir}/usr/lib/modules/6.19.0-rc8/source" || true@' PKGBUILD
 
-            # Build Flags
+            # Global flags
             export _processor_opt="znver4"
             export _O3_opt="1"
             export _sched_ext="0"
@@ -105,7 +105,7 @@ jobs:
 
             # 6. RUN MAKEPKG
             export TERM=dumb
-            # -e skips extract, -f forces overwrite, -d skips deps check if already met
+            # -e: skip extract, -f: force, -s: sync deps
             makepkg -sef --noconfirm --skipchecksums
           EOF
 
