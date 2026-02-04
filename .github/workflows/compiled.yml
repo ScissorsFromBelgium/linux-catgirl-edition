@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo ncurses curl
+          pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo ncurses curl kmod
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -59,7 +59,7 @@ jobs:
             patch -p1 < ../../base.patch
             patch -p1 < ../../dkms.patch
 
-            # 4. PRE-GENERATE THE CONFIG (NO SCHED_EXT, NO BTF)
+            # 4. PRE-GENERATE THE CONFIG
             echo "--> Configuring Kernel..."
             make defconfig
             scripts/config -d SCHED_CLASS_EXT \
@@ -73,24 +73,27 @@ jobs:
             cp .config ../../config
             cd ../..
 
-            # 5. CONFIGURE PKGBUILD
+            # 5. CONFIGURE PKGBUILD (Fixing the Versioning/Packaging Error)
             echo "--> Patching PKGBUILD..."
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
+            
+            # Wipe the old source array and point to local files
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
 
-            # --- THE FIX: Instead of deleting or replacing, append "|| true" ---
-            # This ensures that even if bpftool fails, it doesn't stop the build.
-            # It also preserves the indentation and structure so Bash doesn't throw a syntax error.
+            # Bypass BPF tool errors (the "|| true" trick worked!)
             sed -i '/bpftool/ s/$/ || true/' PKGBUILD
             sed -i '/vmlinux.h/ s/$/ || true/' PKGBUILD
-            # ------------------------------------------------------------------
+            
+            # CRITICAL FIX: Ensure PKGBUILD doesn't fail on version detection during package()
+            # We hardcode the kernel version variable so the 'rm' command doesn't see a double slash
+            sed -i 's/pkgbase=linux-catgirl-edition/pkgbase=linux-catgirl-edition\n_kernver=6.19.0-rc8/g' PKGBUILD
 
-            # Ensure BTF is disabled in PKGBUILD script as well
+            # Force BTF off in PKGBUILD logic
             sed -i 's/scripts\/config -e DEBUG_INFO_BTF/scripts\/config -d DEBUG_INFO_BTF/g' PKGBUILD
 
-            # Flags and Bypasses
+            # Build Flags
             export _processor_opt="znver4"
             export _O3_opt="1"
             export _sched_ext="0"
