@@ -86,16 +86,17 @@ jobs:
             sed -i 's#bpftool#bpftool || true#g' PKGBUILD
             sed -i 's#vmlinux.h#vmlinux.h || true#g' PKGBUILD
             
-            # The "Force Version" injection
+            # FORCE VERSION INJECTION
             # We explicitly define _kernver at the start of the package function
             sed -i '/^package_linux-catgirl-edition() {/a \  _kernver="6.19.0-rc8"' PKGBUILD
             
+            # WILDCARD FIX
             # Replace the problematic 'rm' line with a wildcard-safe version
-            # This ensures even if the variable is weird, the command won't crash the build
+            # This ensures even if the variable is broken, the command finds the folder and succeeds
             sed -i 's@rm "${pkgdir}/usr/lib/modules/${_kernver}/build"@rm -rf "${pkgdir}/usr/lib/modules/"*/build || true@' PKGBUILD
             sed -i 's@rm "${pkgdir}/usr/lib/modules/${_kernver}/source"@rm -rf "${pkgdir}/usr/lib/modules/"*/source || true@' PKGBUILD
 
-            # Set build environment
+            # Build Flags
             export _processor_opt="znver4"
             export _O3_opt="1"
             export _sched_ext="0"
