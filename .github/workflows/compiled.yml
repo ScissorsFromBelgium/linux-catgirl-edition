@@ -73,27 +73,29 @@ jobs:
             cp .config ../../config
             cd ../..
 
-            # 5. CONFIGURE PKGBUILD
+            # 5. HARD-PATCH PKGBUILD
             echo "--> Patching PKGBUILD..."
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
+            # Wipe and set source
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
 
-            # Bypass BPF tool errors - Using '#' as delimiter to be extra safe
+            # Bypass BPF and version detection errors
             sed -i 's#bpftool#bpftool || true#g' PKGBUILD
             sed -i 's#vmlinux.h#vmlinux.h || true#g' PKGBUILD
             
-            # HARDCODE VERSIONING
-            # We insert the version right at the top so every function can see it
-            sed -i 's/pkgbase=linux-catgirl-edition/pkgbase=linux-catgirl-edition\n_kernver=6.19.0-rc8/g' PKGBUILD
+            # The "Force Version" injection
+            # We explicitly define _kernver at the start of the package function
+            sed -i '/^package_linux-catgirl-edition() {/a \  _kernver="6.19.0-rc8"' PKGBUILD
             
-            # FORCE PATHS - Using '@' as delimiter to avoid clash with '||'
-            sed -i 's@rm "${pkgdir}/usr/lib/modules/${_kernver}/build"@rm -rf "${pkgdir}/usr/lib/modules/6.19.0-rc8/build" || true@' PKGBUILD
-            sed -i 's@rm "${pkgdir}/usr/lib/modules/${_kernver}/source"@rm -rf "${pkgdir}/usr/lib/modules/6.19.0-rc8/source" || true@' PKGBUILD
+            # Replace the problematic 'rm' line with a wildcard-safe version
+            # This ensures even if the variable is weird, the command won't crash the build
+            sed -i 's@rm "${pkgdir}/usr/lib/modules/${_kernver}/build"@rm -rf "${pkgdir}/usr/lib/modules/"*/build || true@' PKGBUILD
+            sed -i 's@rm "${pkgdir}/usr/lib/modules/${_kernver}/source"@rm -rf "${pkgdir}/usr/lib/modules/"*/source || true@' PKGBUILD
 
-            # Global flags
+            # Set build environment
             export _processor_opt="znver4"
             export _O3_opt="1"
             export _sched_ext="0"
@@ -105,7 +107,7 @@ jobs:
 
             # 6. RUN MAKEPKG
             export TERM=dumb
-            # -e: skip extract, -f: force, -s: sync deps
+            # -e skips extract, -f forces, -d ignores deps check to save time
             makepkg -sef --noconfirm --skipchecksums
           EOF
 
