@@ -63,7 +63,7 @@ jobs:
             # Manually create the version file
             echo "6.19.0-rc8" > version
 
-            # 4. PRE-GENERATE THE CONFIG (Must be done inside src/linux-6.19.rc8)
+            # 4. PRE-GENERATE THE CONFIG
             echo "--> Generating .config..."
             make defconfig
             scripts/config -d SCHED_CLASS_EXT \
@@ -78,7 +78,6 @@ jobs:
             # Copy config to root for PKGBUILD to find
             cp .config ../../config
             
-            # NOW return to root
             cd ../..
 
             # 5. HARD-PATCH PKGBUILD
@@ -96,9 +95,9 @@ jobs:
             sed -i 's#bpftool#bpftool || true#g' PKGBUILD
             sed -i 's#vmlinux.h#vmlinux.h || true#g' PKGBUILD
 
-            # NUCLEAR FIX FOR CLEANUP
-            sed -i 's|^.*rm .*modules.*build.*$|  rm -rf "${pkgdir}"/usr/lib/modules/*/build || true|' PKGBUILD
-            sed -i 's|^.*rm .*modules.*source.*$|  rm -rf "${pkgdir}"/usr/lib/modules/*/source || true|' PKGBUILD
+            # NUCLEAR FIX FOR CLEANUP (Using @ as delimiter to handle || pipes)
+            sed -i 's@^.*rm .*modules.*build.*$@  rm -rf "${pkgdir}"/usr/lib/modules/*/build || true@' PKGBUILD
+            sed -i 's@^.*rm .*modules.*source.*$@  rm -rf "${pkgdir}"/usr/lib/modules/*/source || true@' PKGBUILD
 
             # Build Flags
             export _processor_opt="znver4"
@@ -112,7 +111,7 @@ jobs:
 
             # 6. RUN MAKEPKG
             export TERM=dumb
-            # -e skips extract (we did it manually), -f forces, -d ignores deps
+            # -e skips extract, -f forces, -d ignores deps
             makepkg -sef --noconfirm --skipchecksums
           EOF
 
