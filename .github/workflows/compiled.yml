@@ -39,13 +39,13 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
 
-            # 1. DOWNLOAD KERNEL & PATCHES
+            # 1. DOWNLOAD
             echo "--> Downloading Kernel and Patches..."
             curl -L "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
             curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/all/0001-cachyos-base-all.patch" -o base.patch
             curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/misc/dkms-clang.patch" -o dkms.patch
 
-            # 2. EXTRACT AND RENAME
+            # 2. EXTRACT
             echo "--> Extracting..."
             rm -rf src/
             mkdir -p src
@@ -53,20 +53,20 @@ jobs:
             ROOT_FOLDER=$(tar -tf linux-6.19-rc8.tar.gz | head -1 | cut -f1 -d"/")
             mv "src/$ROOT_FOLDER" src/linux-6.19.rc8
 
-            # 3. APPLY PATCHES & CONFIGURE
-            echo "--> Applying Patches & Configuring..."
+            # 3. APPLY PATCHES
+            echo "--> Applying Patches..."
             cd src/linux-6.19.rc8
-            
             patch -p1 < ../../base.patch
             patch -p1 < ../../dkms.patch
             echo "6.19.0-rc8" > version
 
-            # 4. GENERATE THE CONFIG
+            # 4. FORCED CONFIG (Ensuring Modules are enabled)
             echo "--> Generating .config..."
+            # We use localmodconfig or defconfig but ensure MODULES=y
             make defconfig
-            scripts/config -d SCHED_CLASS_EXT \
+            scripts/config -e MODULES \
+                           -d SCHED_CLASS_EXT \
                            -d DEBUG_INFO_BTF \
-                           -d DEBUG_INFO_BTF_FEATURES \
                            -e TCP_CONG_BBR3 -e DEFAULT_BBR3 \
                            --set-val HZ 1000 -e HZ_1000 \
                            -e LRU_GEN -e LRU_GEN_ENABLED
@@ -75,52 +75,38 @@ jobs:
             cp .config ../../config
             cd ../..
 
-            # 5. HARD-PATCH PKGBUILD
+            # 5. PATCH PKGBUILD
             echo "--> Patching PKGBUILD..."
-            
-            # Version settings
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
-            # Source setup
+            # Wipe and set source
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
 
-            # Bypass BPF and version detection errors
-            sed -i 's#bpftool#bpftool || true#g' PKGBUILD
-            sed -i 's#vmlinux.h#vmlinux.h || true#g' PKGBUILD
-
-            # Fix the "rm" commands in PKGBUILD that cause failures if directories are missing
-            # We change them to -f (force) so they never return an error code
-            sed -i 's/rm /rm -f /g' PKGBUILD
+            # CRITICAL: Prevent the PKGBUILD from overwriting our patched source
+            # We comment out the prepare() function's patch attempts if they exist
+            sed -i '/patch -p1/s/^/#/' PKGBUILD
 
             # Build Flags
             export _processor_opt="znver4"
             export _O3_opt="1"
-            export _sched_ext="0"
-            export _tcp_bbr3="1"
-            
             sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
-            
-            # Ensure the build doesn't die on non-critical errors
-            sed -i 's|_die "|echo "Ignored error: #|g' PKGBUILD
 
             # 6. RUN MAKEPKG
+            # We remove -e to let makepkg handle the build environment properly
+            # But we keep our manual extract in src/ so it finds it.
             export TERM=dumb
-            # -e: Use existing src/
-            # -s: Install missing deps
-            # -f: Force overwrite
-            makepkg -sef --noconfirm --skipchecksums
+            makepkg -sf --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
         run: |
-          # Use a wildcard to ensure we catch the actual package even if naming varies
-          zip linux-catgirl-6.19-znver4-full.zip *.pkg.tar.zst
+          zip linux-catgirl-6.19-full.zip *.pkg.tar.zst
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-catgirl-full-package
-          path: linux-catgirl-6.19-znver4-full.zip
+          name: linux-catgirl-package
+          path: linux-catgirl-6.19-full.zip
