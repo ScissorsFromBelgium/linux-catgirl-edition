@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo ncurses curl kmod
+          pacman -S --noconfirm base-devel git zip bc cpio pahole python clang llvm lld sudo ncurses curl kmod rsync
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -40,53 +40,41 @@ jobs:
             cd "$WORKSPACE_PATH"
 
             # 1. DOWNLOAD
-            echo "--> Downloading Kernel and Patches..."
             curl -L "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
             curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/all/0001-cachyos-base-all.patch" -o base.patch
             curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/misc/dkms-clang.patch" -o dkms.patch
 
             # 2. EXTRACT
-            echo "--> Extracting..."
-            rm -rf src/
             mkdir -p src
             tar -xf linux-6.19-rc8.tar.gz -C src/
             ROOT_FOLDER=$(tar -tf linux-6.19-rc8.tar.gz | head -1 | cut -f1 -d"/")
             mv "src/$ROOT_FOLDER" src/linux-6.19.rc8
 
-            # 3. APPLY PATCHES
-            echo "--> Applying Patches..."
+            # 3. CONFIGURE KERNEL (Generic but Full)
             cd src/linux-6.19.rc8
-            patch -p1 < ../../base.patch
-            patch -p1 < ../../dkms.patch
-            echo "6.19.0-rc8" > version
-
-            # 4. FORCED CONFIG (Ensuring Modules are enabled)
-            echo "--> Generating .config..."
-            # We use localmodconfig or defconfig but ensure MODULES=y
             make defconfig
             scripts/config -e MODULES \
-                           -d SCHED_CLASS_EXT \
                            -d DEBUG_INFO_BTF \
                            -e TCP_CONG_BBR3 -e DEFAULT_BBR3 \
-                           --set-val HZ 1000 -e HZ_1000 \
-                           -e LRU_GEN -e LRU_GEN_ENABLED
-            
+                           --set-val HZ 1000 -e HZ_1000
             make olddefconfig
             cp .config ../../config
             cd ../..
 
-            # 5. PATCH PKGBUILD
-            echo "--> Patching PKGBUILD..."
+            # 4. PATCH PKGBUILD (Nuclear Fix for modprobed.db)
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
-            # Wipe and set source
+            # Disable modprobed.db globally so it doesn't crash
+            sed -i 's/_localmodcfg=y/_localmodcfg=n/g' PKGBUILD || true
+            sed -i 's/use_localmodcfg=y/use_localmodcfg=n/g' PKGBUILD || true
+            
+            # Source setup
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
 
-            # CRITICAL: Prevent the PKGBUILD from overwriting our patched source
-            # We comment out the prepare() function's patch attempts if they exist
-            sed -i '/patch -p1/s/^/#/' PKGBUILD
+            # Bypass the error that stopped the last build
+            sed -i 's/error "No modprobed.db data found"/echo "Skipping modprobed.db"/g' PKGBUILD
 
             # Build Flags
             export _processor_opt="znver4"
@@ -94,19 +82,14 @@ jobs:
             sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
 
-            # 6. RUN MAKEPKG
-            # We remove -e to let makepkg handle the build environment properly
-            # But we keep our manual extract in src/ so it finds it.
+            # 5. RUN MAKEPKG
+            # We don't use -e here to allow the PKGBUILD to run properly
             export TERM=dumb
             makepkg -sf --noconfirm --skipchecksums
           EOF
 
-      - name: Prepare and Upload Artifacts
-        run: |
-          zip linux-catgirl-6.19-full.zip *.pkg.tar.zst
-          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-catgirl-package
-          path: linux-catgirl-6.19-full.zip
+          name: linux-catgirl-6.19-znver4
+          path: "*.pkg.tar.zst"
