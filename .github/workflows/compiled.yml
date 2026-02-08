@@ -64,23 +64,21 @@ jobs:
             cp .config ../../config
             cd ../..
 
-            # 4. AGGRESSIVE PKGBUILD PATCHING
+            # 4. SAFE PKGBUILD PATCHING
             echo "--> Patching PKGBUILD..."
+            
+            # Create a DUMMY modprobed.db so the script's check passes naturally
+            touch modprobed.db
             
             # Update Version
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
-            # Disable modprobed.db variables
+            # Force localmodcfg to NO so it builds everything
             sed -i 's/_localmodcfg=y/_localmodcfg=n/g' PKGBUILD
             sed -i 's/use_localmodcfg=y/use_localmodcfg=n/g' PKGBUILD
 
-            # NUCLEAR OPTION: Delete the code block that checks for modprobed.db
-            # This searches for the error string and comments out that line and the 'exit' or 'error' call.
-            sed -i '/No modprobed.db data found/s/^/# /' PKGBUILD
-            sed -i '/error "No modprobed.db data found"/c\echo "Bypassing modprobed check"' PKGBUILD
-
-            # Source setup
+            # Source setup - clean up and set ours
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
 
@@ -93,9 +91,7 @@ jobs:
             # 5. RUN MAKEPKG
             echo "--> Starting Makepkg..."
             export TERM=dumb
-            # -s installs dependencies
-            # -f forces overwrite
-            # --skipchecksums because we are injecting our own config
+            # -s: install deps, -f: force, --skipchecksums: because we changed the config
             makepkg -sf --noconfirm --skipchecksums
           EOF
 
