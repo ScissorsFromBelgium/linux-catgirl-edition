@@ -67,27 +67,21 @@ jobs:
             # 4. SURGICAL PKGBUILD PATCHING
             echo "--> Patching PKGBUILD..."
             
-            # Create a GHOST FILE with actual content so the "data found" check passes
-            # We put some common modules in there just to look "real"
-            echo "ext4" > ghost_modprobed.db
-            echo "vfat" >> ghost_modprobed.db
-            echo "amdgpu" >> ghost_modprobed.db
-            
             # Update Version
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
-            # Force localmodcfg to NO (This is the key to getting a full kernel)
+            # Disable localmodcfg flags
             sed -i 's/_localmodcfg=y/_localmodcfg=n/g' PKGBUILD
             sed -i 's/use_localmodcfg=y/use_localmodcfg=n/g' PKGBUILD
 
-            # Redirect PKGBUILD to look at our ghost file
-            # We use a double-slash or specific escaping to ensure the path is handled correctly
-            GHOST_PATH="$(pwd)/ghost_modprobed.db"
-            sed -i "s|modprobed.db|$GHOST_PATH|g" PKGBUILD
-
-            # Clean Error Bypass (Prevent the crash even if the ghost file logic is tricky)
-            sed -i 's/error "No .* data found"/echo "Bypassing modprobed check"/g' PKGBUILD
+            # THE NUCLEAR STRIKE: 
+            # We find the line containing the error and delete the entire IF block around it.
+            # This deletes the line with the error AND the 3 lines before it (the check).
+            sed -i '/No modprobed.db data found/ -3, +2d' PKGBUILD || true
+            
+            # Just in case the above fails, a secondary blunt replacement:
+            sed -i 's/error "No modprobed.db data found"/echo "Ignoring missing db"/g' PKGBUILD
 
             # Source setup
             sed -i '/^source=(/,/)/d' PKGBUILD
@@ -100,7 +94,7 @@ jobs:
 
             # 6. SIZE CHECK
             echo "--> Final Package Size Check:"
-            du -sh *.pkg.tar.zst || echo "No package found yet."
+            du -sh *.pkg.tar.zst || echo "Build still in progress or failed."
           EOF
 
       - name: Upload artifact
