@@ -40,17 +40,20 @@ jobs:
             cd "$WORKSPACE_PATH"
 
             # 1. DOWNLOAD
+            echo "--> Downloading Sources..."
             curl -L "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
             curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/all/0001-cachyos-base-all.patch" -o base.patch
             curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/misc/dkms-clang.patch" -o dkms.patch
 
             # 2. EXTRACT
+            echo "--> Extracting..."
             mkdir -p src
             tar -xf linux-6.19-rc8.tar.gz -C src/
             ROOT_FOLDER=$(tar -tf linux-6.19-rc8.tar.gz | head -1 | cut -f1 -d"/")
             mv "src/$ROOT_FOLDER" src/linux-6.19.rc8
 
-            # 3. CONFIGURE KERNEL (Generic but Full)
+            # 3. PRE-CONFIGURE KERNEL
+            echo "--> Pre-configuring..."
             cd src/linux-6.19.rc8
             make defconfig
             scripts/config -e MODULES \
@@ -61,20 +64,25 @@ jobs:
             cp .config ../../config
             cd ../..
 
-            # 4. PATCH PKGBUILD (Nuclear Fix for modprobed.db)
+            # 4. AGGRESSIVE PKGBUILD PATCHING
+            echo "--> Patching PKGBUILD..."
+            
+            # Update Version
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
-            # Disable modprobed.db globally so it doesn't crash
-            sed -i 's/_localmodcfg=y/_localmodcfg=n/g' PKGBUILD || true
-            sed -i 's/use_localmodcfg=y/use_localmodcfg=n/g' PKGBUILD || true
-            
+            # Disable modprobed.db variables
+            sed -i 's/_localmodcfg=y/_localmodcfg=n/g' PKGBUILD
+            sed -i 's/use_localmodcfg=y/use_localmodcfg=n/g' PKGBUILD
+
+            # NUCLEAR OPTION: Delete the code block that checks for modprobed.db
+            # This searches for the error string and comments out that line and the 'exit' or 'error' call.
+            sed -i '/No modprobed.db data found/s/^/# /' PKGBUILD
+            sed -i '/error "No modprobed.db data found"/c\echo "Bypassing modprobed check"' PKGBUILD
+
             # Source setup
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
-
-            # Bypass the error that stopped the last build
-            sed -i 's/error "No modprobed.db data found"/echo "Skipping modprobed.db"/g' PKGBUILD
 
             # Build Flags
             export _processor_opt="znver4"
@@ -83,8 +91,11 @@ jobs:
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
 
             # 5. RUN MAKEPKG
-            # We don't use -e here to allow the PKGBUILD to run properly
+            echo "--> Starting Makepkg..."
             export TERM=dumb
+            # -s installs dependencies
+            # -f forces overwrite
+            # --skipchecksums because we are injecting our own config
             makepkg -sf --noconfirm --skipchecksums
           EOF
 
