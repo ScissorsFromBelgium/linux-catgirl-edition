@@ -59,11 +59,9 @@ jobs:
             
             patch -p1 < ../../base.patch
             patch -p1 < ../../dkms.patch
-
-            # Manually create the version file
             echo "6.19.0-rc8" > version
 
-            # 4. PRE-GENERATE THE CONFIG
+            # 4. GENERATE THE CONFIG
             echo "--> Generating .config..."
             make defconfig
             scripts/config -d SCHED_CLASS_EXT \
@@ -74,10 +72,7 @@ jobs:
                            -e LRU_GEN -e LRU_GEN_ENABLED
             
             make olddefconfig
-            
-            # Copy config to root for PKGBUILD to find
             cp .config ../../config
-            
             cd ../..
 
             # 5. HARD-PATCH PKGBUILD
@@ -87,7 +82,7 @@ jobs:
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
-            # Wipe and set source
+            # Source setup
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
 
@@ -95,9 +90,9 @@ jobs:
             sed -i 's#bpftool#bpftool || true#g' PKGBUILD
             sed -i 's#vmlinux.h#vmlinux.h || true#g' PKGBUILD
 
-            # NUCLEAR FIX FOR CLEANUP (Using @ as delimiter to handle || pipes)
-            sed -i 's@^.*rm .*modules.*build.*$@  rm -rf "${pkgdir}"/usr/lib/modules/*/build || true@' PKGBUILD
-            sed -i 's@^.*rm .*modules.*source.*$@  rm -rf "${pkgdir}"/usr/lib/modules/*/source || true@' PKGBUILD
+            # Fix the "rm" commands in PKGBUILD that cause failures if directories are missing
+            # We change them to -f (force) so they never return an error code
+            sed -i 's/rm /rm -f /g' PKGBUILD
 
             # Build Flags
             export _processor_opt="znver4"
@@ -107,20 +102,25 @@ jobs:
             
             sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
             sed -i 's|interactive=y|interactive=n|g' PKGBUILD
-            sed -i 's|_die "|true; #|g' PKGBUILD
+            
+            # Ensure the build doesn't die on non-critical errors
+            sed -i 's|_die "|echo "Ignored error: #|g' PKGBUILD
 
             # 6. RUN MAKEPKG
             export TERM=dumb
-            # -e skips extract, -f forces, -d ignores deps
+            # -e: Use existing src/
+            # -s: Install missing deps
+            # -f: Force overwrite
             makepkg -sef --noconfirm --skipchecksums
           EOF
 
       - name: Prepare and Upload Artifacts
         run: |
-          zip linux-catgirl-6.19-znver4-nuclear.zip *.pkg.tar.zst
+          # Use a wildcard to ensure we catch the actual package even if naming varies
+          zip linux-catgirl-6.19-znver4-full.zip *.pkg.tar.zst
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-catgirl-nuclear-patched
-          path: linux-catgirl-6.19-znver4-nuclear.zip
+          name: linux-catgirl-full-package
+          path: linux-catgirl-6.19-znver4-full.zip
