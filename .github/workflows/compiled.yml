@@ -53,18 +53,18 @@ jobs:
             ROOT_FOLDER=$(tar -tf linux-6.19-rc8.tar.gz | head -1 | cut -f1 -d"/")
             mv "src/$ROOT_FOLDER" src/linux-6.19.rc8
 
-            # 3. APPLY PATCHES
-            echo "--> Applying CachyOS patches..."
+            # 3. APPLY PATCHES & CONFIGURE
+            echo "--> Applying Patches & Configuring..."
             cd src/linux-6.19.rc8
+            
             patch -p1 < ../../base.patch
             patch -p1 < ../../dkms.patch
 
-            # Manually create the version file to prevent 'No such file' error
+            # Manually create the version file
             echo "6.19.0-rc8" > version
-            cd ../..
 
-            # 4. PRE-GENERATE THE CONFIG
-            echo "--> Configuring Kernel..."
+            # 4. PRE-GENERATE THE CONFIG (Must be done inside src/linux-6.19.rc8)
+            echo "--> Generating .config..."
             make defconfig
             scripts/config -d SCHED_CLASS_EXT \
                            -d DEBUG_INFO_BTF \
@@ -74,7 +74,11 @@ jobs:
                            -e LRU_GEN -e LRU_GEN_ENABLED
             
             make olddefconfig
+            
+            # Copy config to root for PKGBUILD to find
             cp .config ../../config
+            
+            # NOW return to root
             cd ../..
 
             # 5. HARD-PATCH PKGBUILD
@@ -93,8 +97,6 @@ jobs:
             sed -i 's#vmlinux.h#vmlinux.h || true#g' PKGBUILD
 
             # NUCLEAR FIX FOR CLEANUP
-            # Use Regex to match ANY line trying to remove the build symlink
-            # Replace it with a wildcard delete that cannot fail even if variables are empty
             sed -i 's|^.*rm .*modules.*build.*$|  rm -rf "${pkgdir}"/usr/lib/modules/*/build || true|' PKGBUILD
             sed -i 's|^.*rm .*modules.*source.*$|  rm -rf "${pkgdir}"/usr/lib/modules/*/source || true|' PKGBUILD
 
@@ -110,7 +112,7 @@ jobs:
 
             # 6. RUN MAKEPKG
             export TERM=dumb
-            # -e skips extract, -f forces, -d ignores deps check to save time
+            # -e skips extract (we did it manually), -f forces, -d ignores deps
             makepkg -sef --noconfirm --skipchecksums
           EOF
 
