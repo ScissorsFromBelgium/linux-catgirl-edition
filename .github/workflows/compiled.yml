@@ -67,21 +67,21 @@ jobs:
             # 4. SURGICAL PKGBUILD PATCHING
             echo "--> Patching PKGBUILD..."
             
+            # Create a GHOST FILE in the current directory (safe permissions)
+            echo "ext4" > ghost_modprobed.db
+            
             # Update Version
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
-            # GHOST FILES: Create modprobed.db in all possible locations
-            mkdir -p "$HOME/.config"
-            echo "ext4" > modprobed.db
-            cp modprobed.db "$HOME/.config/modprobed.db"
-            
-            # Force localmodcfg to NO so it doesn't actually try to strip drivers
+            # Force localmodcfg to NO
             sed -i 's/_localmodcfg=y/_localmodcfg=n/g' PKGBUILD
             sed -i 's/use_localmodcfg=y/use_localmodcfg=n/g' PKGBUILD
 
-            # CLEAN ERROR BYPASS: Replace 'error' call with a simple message. 
-            # This avoids the syntax error by keeping the line count and structure.
+            # Point the PKGBUILD modprobed check to our ghost file instead of $HOME
+            sed -i "s|modprobed.db|$(pwd)/ghost_modprobed.db|g" PKGBUILD
+
+            # Clean Error Bypass (Direct replacement to keep syntax valid)
             sed -i 's/error "No modprobed.db data found"/echo "Bypassing modprobed check"/g' PKGBUILD
 
             # Source setup
@@ -91,7 +91,6 @@ jobs:
             # 5. RUN MAKEPKG
             echo "--> Starting Makepkg..."
             export TERM=dumb
-            # -s (install deps), -f (force), --skipchecksums
             makepkg -sf --noconfirm --skipchecksums
 
             # 6. SIZE CHECK
