@@ -1,4 +1,4 @@
-name: "Catgirl-Edition-Extreme"
+name: "Catgirl-Edition-Nuclear"
 
 on:
   workflow_dispatch:
@@ -59,6 +59,10 @@ jobs:
             patch -p1 < ../../base.patch
             patch -p1 < ../../dkms.patch
 
+            # Manually create the version file to prevent 'No such file' error
+            echo "6.19.0-rc8" > version
+            cd ../..
+
             # 4. PRE-GENERATE THE CONFIG
             echo "--> Configuring Kernel..."
             make defconfig
@@ -75,6 +79,8 @@ jobs:
 
             # 5. HARD-PATCH PKGBUILD
             echo "--> Patching PKGBUILD..."
+            
+            # Version settings
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
@@ -85,16 +91,12 @@ jobs:
             # Bypass BPF and version detection errors
             sed -i 's#bpftool#bpftool || true#g' PKGBUILD
             sed -i 's#vmlinux.h#vmlinux.h || true#g' PKGBUILD
-            
-            # FORCE VERSION INJECTION
-            # We explicitly define _kernver at the start of the package function
-            sed -i '/^package_linux-catgirl-edition() {/a \  _kernver="6.19.0-rc8"' PKGBUILD
-            
-            # WILDCARD FIX
-            # Replace the problematic 'rm' line with a wildcard-safe version
-            # This ensures even if the variable is broken, the command finds the folder and succeeds
-            sed -i 's@rm "${pkgdir}/usr/lib/modules/${_kernver}/build"@rm -rf "${pkgdir}/usr/lib/modules/"*/build || true@' PKGBUILD
-            sed -i 's@rm "${pkgdir}/usr/lib/modules/${_kernver}/source"@rm -rf "${pkgdir}/usr/lib/modules/"*/source || true@' PKGBUILD
+
+            # NUCLEAR FIX FOR CLEANUP
+            # Use Regex to match ANY line trying to remove the build symlink
+            # Replace it with a wildcard delete that cannot fail even if variables are empty
+            sed -i 's|^.*rm .*modules.*build.*$|  rm -rf "${pkgdir}"/usr/lib/modules/*/build || true|' PKGBUILD
+            sed -i 's|^.*rm .*modules.*source.*$|  rm -rf "${pkgdir}"/usr/lib/modules/*/source || true|' PKGBUILD
 
             # Build Flags
             export _processor_opt="znver4"
@@ -114,10 +116,10 @@ jobs:
 
       - name: Prepare and Upload Artifacts
         run: |
-          zip linux-catgirl-6.19-znver4-extreme.zip *.pkg.tar.zst
+          zip linux-catgirl-6.19-znver4-nuclear.zip *.pkg.tar.zst
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-catgirl-extreme-patched
-          path: linux-catgirl-6.19-znver4-extreme.zip
+          name: linux-catgirl-nuclear-patched
+          path: linux-catgirl-6.19-znver4-nuclear.zip
