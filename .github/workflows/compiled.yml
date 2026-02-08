@@ -64,35 +64,39 @@ jobs:
             cp .config ../../config
             cd ../..
 
-            # 4. SAFE PKGBUILD PATCHING
+            # 4. SURGICAL PKGBUILD PATCHING
             echo "--> Patching PKGBUILD..."
-            
-            # Create a DUMMY modprobed.db so the script's check passes naturally
-            touch modprobed.db
             
             # Update Version
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
-            # Force localmodcfg to NO so it builds everything
+            # GHOST FILES: Create modprobed.db in all possible locations
+            mkdir -p "$HOME/.config"
+            echo "ext4" > modprobed.db
+            cp modprobed.db "$HOME/.config/modprobed.db"
+            
+            # Force localmodcfg to NO so it doesn't actually try to strip drivers
             sed -i 's/_localmodcfg=y/_localmodcfg=n/g' PKGBUILD
             sed -i 's/use_localmodcfg=y/use_localmodcfg=n/g' PKGBUILD
 
-            # Source setup - clean up and set ours
+            # CLEAN ERROR BYPASS: Replace 'error' call with a simple message. 
+            # This avoids the syntax error by keeping the line count and structure.
+            sed -i 's/error "No modprobed.db data found"/echo "Bypassing modprobed check"/g' PKGBUILD
+
+            # Source setup
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
-
-            # Build Flags
-            export _processor_opt="znver4"
-            export _O3_opt="1"
-            sed -i 's|_makenconfig:=[^}]*}|_makenconfig:=no}|' PKGBUILD
-            sed -i 's|interactive=y|interactive=n|g' PKGBUILD
 
             # 5. RUN MAKEPKG
             echo "--> Starting Makepkg..."
             export TERM=dumb
-            # -s: install deps, -f: force, --skipchecksums: because we changed the config
+            # -s (install deps), -f (force), --skipchecksums
             makepkg -sf --noconfirm --skipchecksums
+
+            # 6. SIZE CHECK
+            echo "--> Final Package Size Check:"
+            du -sh *.pkg.tar.zst
           EOF
 
       - name: Upload artifact
