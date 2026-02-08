@@ -1,4 +1,4 @@
-name: "Catgirl-Edition-Final-Boss"
+name: "Catgirl-Edition-Final-Strike"
 
 on:
   workflow_dispatch:
@@ -64,25 +64,28 @@ jobs:
             cp .config ../../config
             cd ../..
 
-            # 4. PKGBUILD PATCHING
+            # 4. SURGICAL PKGBUILD PATCHING
             echo "--> Patching PKGBUILD..."
             
-            # Update Version
+            # Create a dummy file just to satisfy the -s check
+            echo "amdgpu" > fake_db.db
+
+            # Update Version to match our download
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
-            
-            # Disable localmodcfg variables
-            sed -i 's/_localmodcfg=y/_localmodcfg=n/g' PKGBUILD
-            sed -i 's/use_localmodcfg=y/use_localmodcfg=n/g' PKGBUILD
 
-            # --- THE FIX ---
-            # Instead of looking for line numbers, we target the logic strings directly.
-            # 1. If it checks if the file exists, make it always think it exists.
-            sed -i 's/\[\[ -f .*modprobed.db \]\]/true/g' PKGBUILD
-            # 2. If it checks if the file has data (-s), make it always think it has data.
-            sed -i 's/\[\[ -s .*modprobed.db \]\]/true/g' PKGBUILD
-            # 3. If it tries to call the error function for modprobed, change it to echo.
-            sed -i 's/error "No modprobed.db data found"/echo "Bypassing modprobed error"/g' PKGBUILD
+            # FORCE CONFIGS
+            # We turn off localmodcfg to ensure a full kernel build
+            sed -i 's/: "${_localmodcfg:=yes}"/: "${_localmodcfg:=no}"/' PKGBUILD
+            sed -i 's/: "${_makenconfig:=yes}"/: "${_makenconfig:=no}"/' PKGBUILD
+            sed -i 's/: "${_processor_opt:=x86-64}"/: "${_processor_opt:=znver4}"/' PKGBUILD
+            
+            # Path redirection to our fake file
+            sed -i "s|: \"\${_localmodcfg_path:=\"\$HOME/.config/modprobed.db\"}\"|: \"\${_localmodcfg_path:=\"$(pwd)/fake_db.db\"}\"|" PKGBUILD
+
+            # The Nuclear Fix: Remove the error call from the prepare() function logic
+            # This searches for the exact error message from your log and kills it
+            sed -i 's/error "No modprobed.db data found"/echo "Skipping modprobed check"/' PKGBUILD
 
             # Source setup
             sed -i '/^source=(/,/)/d' PKGBUILD
@@ -91,11 +94,12 @@ jobs:
             # 5. RUN MAKEPKG
             echo "--> Starting Makepkg..."
             export TERM=dumb
+            # -s: install deps, -f: force, -i: install (not needed here), -C: clean first
             makepkg -sf --noconfirm --skipchecksums
 
             # 6. SIZE CHECK
             echo "--> Final Package Size Check:"
-            du -sh *.pkg.tar.zst || echo "Build failed or still running."
+            du -sh *.pkg.tar.zst
           EOF
 
       - name: Upload artifact
