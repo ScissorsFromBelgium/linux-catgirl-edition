@@ -16,9 +16,13 @@ jobs:
     steps:
       - name: Maximize build space
         run: |
+          df -h
           rm -rf /usr/share/dotnet
           rm -rf /usr/local/lib/android
           rm -rf /opt/ghc
+          rm -rf /usr/local/share/boost
+          rm -rf /opt/hostedtoolcache
+          df -h
 
       - name: Install dependencies
         run: |
@@ -54,11 +58,13 @@ jobs:
             echo 'b2sums=("SKIP" "SKIP" "SKIP" "SKIP")' >> PKGBUILD
             
             export _localmodcfg=no
+            export _diet_kernel=yes
             export _makenconfig=no
             export _processor_opt=znver4
             export _tcp_bbr3=yes
             export _no_btf=no
             export _disable_debugging=no
+            export _disable_simpledrm=yes
             export TERM=dumb
             
             echo "--> Starting Makepkg..."
