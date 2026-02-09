@@ -1,4 +1,4 @@
-name: "Catgirl-Edition-Final-Strike"
+name: "Catgirl-Edition-BTF-Fix"
 
 on:
   workflow_dispatch:
@@ -56,10 +56,14 @@ jobs:
             echo "--> Pre-configuring..."
             cd src/linux-6.19.rc8
             make defconfig
+            
+            # ENABLE BTF so bpftool doesn't crash
+            # We enable DEBUG_INFO to satisfy the dependency for BTF
             scripts/config -e MODULES \
-                           -d DEBUG_INFO_BTF \
+                           -e DEBUG_INFO -e DEBUG_INFO_BTF \
                            -e TCP_CONG_BBR3 -e DEFAULT_BBR3 \
                            --set-val HZ 1000 -e HZ_1000
+                           
             make olddefconfig
             cp .config ../../config
             cd ../..
@@ -70,7 +74,7 @@ jobs:
             # Create a dummy file just to satisfy the -s check
             echo "amdgpu" > fake_db.db
 
-            # Update Version to match our download
+            # Update Version
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
 
@@ -84,7 +88,6 @@ jobs:
             sed -i "s|: \"\${_localmodcfg_path:=\"\$HOME/.config/modprobed.db\"}\"|: \"\${_localmodcfg_path:=\"$(pwd)/fake_db.db\"}\"|" PKGBUILD
 
             # The Nuclear Fix: Remove the error call from the prepare() function logic
-            # This searches for the exact error message from your log and kills it
             sed -i 's/error "No modprobed.db data found"/echo "Skipping modprobed check"/' PKGBUILD
 
             # Source setup
