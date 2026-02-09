@@ -37,33 +37,21 @@ jobs:
           sudo -u builduser bash <<'EOF'
             set -e
             
-            # Download source and patches
             echo "--> Downloading Sources..."
             curl -L "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
             curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/all/0001-cachyos-base-all.patch" -o 0001-cachyos-base-all.patch
             curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/misc/dkms-clang.patch" -o dkms-clang.patch
             
-            # Update version in PKGBUILD
             echo "--> Patching PKGBUILD version..."
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
-            # Delete old source and checksum arrays
             sed -i '/^source=(/,/^)/d' PKGBUILD
             sed -i '/^b2sums=(/,/)/d' PKGBUILD
             
-            # Add new source array
-            cat >> PKGBUILD << 'PKGBUILD_EOF'
-source=(
-    "linux-6.19-rc8.tar.gz"
-    "config"
-    "0001-cachyos-base-all.patch"
-    "dkms-clang.patch"
-)
-b2sums=("SKIP" "SKIP" "SKIP" "SKIP")
-PKGBUILD_EOF
+            echo 'source=("linux-6.19-rc8.tar.gz" "config" "0001-cachyos-base-all.patch" "dkms-clang.patch")' >> PKGBUILD
+            echo 'b2sums=("SKIP" "SKIP" "SKIP" "SKIP")' >> PKGBUILD
             
-            # Set build options via environment variables
             export _localmodcfg=no
             export _makenconfig=no
             export _processor_opt=znver4
@@ -72,11 +60,9 @@ PKGBUILD_EOF
             export _disable_debugging=no
             export TERM=dumb
             
-            # Build
             echo "--> Starting Makepkg..."
             makepkg -sf --noconfirm --skipchecksums
             
-            # Results
             echo "--> Final Package Size Check:"
             du -sh *.pkg.tar.zst || echo "Build failed to produce a package."
           EOF
