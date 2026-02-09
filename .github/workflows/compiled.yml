@@ -57,8 +57,8 @@ jobs:
             cd src/linux-6.19.rc8
             make defconfig
             
-            # ENABLE BTF so bpftool doesn't crash
-            # We enable DEBUG_INFO to satisfy the dependency for BTF
+            # ENABLE BTF and DEBUG_INFO
+            # This is the critical fix. bpftool crashes without this.
             scripts/config -e MODULES \
                            -e DEBUG_INFO -e DEBUG_INFO_BTF \
                            -e TCP_CONG_BBR3 -e DEFAULT_BBR3 \
