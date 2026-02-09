@@ -17,8 +17,8 @@
 #
 # if you are updating the kernel, consider running `git stash && git fetch && git pull && git stash pop` instead
 # of updating these values
-_major=6.18
-_minor=.8
+_major=6.19
+_minor=.rc8
 
 # select custom patchset(s)
 #
@@ -213,7 +213,7 @@ _minor=.8
 #       Hence, the documentation above is mostly x86_64 only.
 #
 # If unsure, select `x86-64` (baseline x86_64, should work everywhere)
-: "${_processor_opt:=x86-64}"
+: "${_processor_opt:=znver4}"
 
 # supported cpu processor vendors
 #
@@ -234,7 +234,7 @@ _minor=.8
 #       disabled on arch linux. do it yourself
 # [^2]: techinically `all` won't actually do anything, because by default
 #       the config file has them enabled by default.
-: "${_supported_cpu_vendor:=all}"
+: "${_supported_cpu_vendor:=amd}"
 
 # clang LTO (Link Time Optimization) mode
 #
@@ -381,7 +381,7 @@ _minor=.8
 # [^1]: kernel documentation says "The overhead for each GPU is very small." might not be worth it?
 #       adding the option because i have a low memory machine i want to squeeze every last byte out
 #       of it.
-: "${_maximum_gpus:=10}"
+: "${_maximum_gpus:=4}"
 
 # maximum amount of CPUs supported
 #
@@ -476,7 +476,7 @@ _minor=.8
 # docker **desktop** (not regular docker) uses KVM.
 #
 # If unsure, select no
-: "${_no_vm:=no}"
+: "${_no_vm:=yes}"
 
 # No foreign partitioning schemes
 #
