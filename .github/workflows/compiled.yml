@@ -48,18 +48,20 @@ jobs:
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
-            # Replace source array with local files
-            sed -i '/^source=(/,/^)/c\
-source=(\
-    "linux-6.19-rc8.tar.gz"\
-    "config"\
-    "0001-cachyos-base-all.patch"\
-    "dkms-clang.patch"\
-)' PKGBUILD
-            
-            # Clean checksums and add SKIP
+            # Delete old source and checksum arrays
+            sed -i '/^source=(/,/^)/d' PKGBUILD
             sed -i '/^b2sums=(/,/)/d' PKGBUILD
-            echo 'b2sums=("SKIP" "SKIP" "SKIP" "SKIP")' >> PKGBUILD
+            
+            # Add new source array
+            cat >> PKGBUILD << 'PKGBUILD_EOF'
+source=(
+    "linux-6.19-rc8.tar.gz"
+    "config"
+    "0001-cachyos-base-all.patch"
+    "dkms-clang.patch"
+)
+b2sums=("SKIP" "SKIP" "SKIP" "SKIP")
+PKGBUILD_EOF
             
             # Set build options via environment variables
             export _localmodcfg=no
