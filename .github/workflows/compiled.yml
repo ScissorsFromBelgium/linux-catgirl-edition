@@ -1,4 +1,4 @@
-name: "Catgirl-Edition-Integrity-Fix"
+name: "Catgirl-Edition-BTF-Path-Fix"
 
 on:
   workflow_dispatch:
@@ -39,36 +39,39 @@ jobs:
             set -e
             cd "$WORKSPACE_PATH"
 
-            # 1. DOWNLOAD
+            # 1. DOWNLOAD SOURCE
             echo "--> Downloading Sources..."
             curl -L "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
 
             # 2. PATCH PKGBUILD
             echo "--> Patching PKGBUILD..."
             
-            # Update Version
+            # Update Version strings
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
 
-            # Force settings
+            # Set build preferences
             sed -i 's/: "${_localmodcfg:=yes}"/: "${_localmodcfg:=no}"/' PKGBUILD
             sed -i 's/: "${_makenconfig:=yes}"/: "${_makenconfig:=no}"/' PKGBUILD
             sed -i 's/: "${_processor_opt:=x86-64}"/: "${_processor_opt:=znver4}"/' PKGBUILD
             
-            # BTF and BBR3 Injection
+            # THE PATH-AWARE INJECTION
+            # We find the directory containing 'scripts/config' and CD into it inside prepare()
             sed -i '/prepare() {/a \
-              echo "--> Forcing BTF and BBR3 configs..." \
+              echo "--> Locating kernel source..." \
+              KDIR=$(find "$srcdir" -maxdepth 2 -name Makefile -exec dirname {} + | head -n 1) \
+              cd "$KDIR" \
+              echo "--> Forcing BTF and BBR3 configs in $(pwd)..." \
               scripts/config -e DEBUG_INFO -e DEBUG_INFO_BTF -e DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
                              -d DEBUG_INFO_REDUCED -d DEBUG_INFO_COMPRESSED -d DEBUG_INFO_SPLIT \
                              -e TCP_CONG_BBR3 -e DEFAULT_BBR3 \
                              --set-val HZ 1000 -e HZ_1000 \
                              -e BPF -e BPF_SYSCALL' PKGBUILD
 
-            # Fix the modprobed.db check error
+            # Avoid modprobed.db errors
             sed -i 's/error "No modprobed.db data found"/echo "Skipping modprobed check"/' PKGBUILD
 
-            # WIPE ALL SOURCE AND SUM ARRAYS
-            # This prevents the "Integrity checks differ in size" error
+            # Clean up source and checksum arrays
             sed -i '/^source=(/,/)/d' PKGBUILD
             sed -i '/^md5sums=(/,/)/d' PKGBUILD
             sed -i '/^sha1sums=(/,/)/d' PKGBUILD
@@ -77,19 +80,19 @@ jobs:
             sed -i '/^sha512sums=(/,/)/d' PKGBUILD
             sed -i '/^b2sums=(/,/)/d' PKGBUILD
 
-            # RE-ADD CLEAN SOURCE AND SKIP SUMS
+            # Re-insert our specific source
             echo 'source=("linux-6.19-rc8.tar.gz")' >> PKGBUILD
             echo 'sha256sums=("SKIP")' >> PKGBUILD
 
             # 3. RUN MAKEPKG
             echo "--> Starting Makepkg..."
             export TERM=dumb
-            # --skipchecksums is a secondary safety net
+            # -s installs missing deps, -f forces build, --skipchecksums for extra safety
             makepkg -sf --noconfirm --skipchecksums
 
-            # 4. SIZE CHECK
+            # 4. RESULTS
             echo "--> Final Package Size Check:"
-            du -sh *.pkg.tar.zst || echo "No package found!"
+            du -sh *.pkg.tar.zst || echo "Build failed to produce a package."
           EOF
 
       - name: Upload artifact
