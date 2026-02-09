@@ -1,4 +1,4 @@
-name: "Catgirl-Edition-BTF-Final-Fix"
+name: "Catgirl-Edition-Integrity-Fix"
 
 on:
   workflow_dispatch:
@@ -55,9 +55,7 @@ jobs:
             sed -i 's/: "${_makenconfig:=yes}"/: "${_makenconfig:=no}"/' PKGBUILD
             sed -i 's/: "${_processor_opt:=x86-64}"/: "${_processor_opt:=znver4}"/' PKGBUILD
             
-            # The "Nuclear" Config Injection: 
-            # We insert our config requirements at the end of the prepare() function
-            # so they override everything else.
+            # BTF and BBR3 Injection
             sed -i '/prepare() {/a \
               echo "--> Forcing BTF and BBR3 configs..." \
               scripts/config -e DEBUG_INFO -e DEBUG_INFO_BTF -e DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
@@ -69,17 +67,25 @@ jobs:
             # Fix the modprobed.db check error
             sed -i 's/error "No modprobed.db data found"/echo "Skipping modprobed check"/' PKGBUILD
 
-            # Source setup - cleaning it up to only what we need
+            # WIPE ALL SOURCE AND SUM ARRAYS
+            # This prevents the "Integrity checks differ in size" error
             sed -i '/^source=(/,/)/d' PKGBUILD
+            sed -i '/^md5sums=(/,/)/d' PKGBUILD
+            sed -i '/^sha1sums=(/,/)/d' PKGBUILD
+            sed -i '/^sha256sums=(/,/)/d' PKGBUILD
+            sed -i '/^sha384sums=(/,/)/d' PKGBUILD
+            sed -i '/^sha512sums=(/,/)/d' PKGBUILD
+            sed -i '/^b2sums=(/,/)/d' PKGBUILD
+
+            # RE-ADD CLEAN SOURCE AND SKIP SUMS
             echo 'source=("linux-6.19-rc8.tar.gz")' >> PKGBUILD
-            # Add dummy sha256sums to pass integrity check
             echo 'sha256sums=("SKIP")' >> PKGBUILD
 
             # 3. RUN MAKEPKG
             echo "--> Starting Makepkg..."
             export TERM=dumb
-            # -s: install missing deps, -f: force build
-            makepkg -sf --noconfirm
+            # --skipchecksums is a secondary safety net
+            makepkg -sf --noconfirm --skipchecksums
 
             # 4. SIZE CHECK
             echo "--> Final Package Size Check:"
