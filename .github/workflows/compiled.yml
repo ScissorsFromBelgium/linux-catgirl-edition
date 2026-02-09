@@ -1,4 +1,4 @@
-name: "Catgirl-Edition-6.19.rc8-znver4"
+name: "Catgirl-Edition-BTF-Path-Fix"
 
 on:
   workflow_dispatch:
