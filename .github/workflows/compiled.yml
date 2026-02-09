@@ -37,18 +37,29 @@ jobs:
           sudo -u builduser bash <<'EOF'
             set -e
             
-            # Download source
+            # Download source and patches
             echo "--> Downloading Sources..."
             curl -L "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
+            curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/all/0001-cachyos-base-all.patch" -o 0001-cachyos-base-all.patch
+            curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/misc/dkms-clang.patch" -o dkms-clang.patch
             
             # Update version in PKGBUILD
             echo "--> Patching PKGBUILD version..."
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
             
+            # Replace source array with local files
+            sed -i '/^source=(/,/^)/c\
+source=(\
+    "linux-6.19-rc8.tar.gz"\
+    "config"\
+    "0001-cachyos-base-all.patch"\
+    "dkms-clang.patch"\
+)' PKGBUILD
+            
             # Clean checksums and add SKIP
             sed -i '/^b2sums=(/,/)/d' PKGBUILD
-            echo 'b2sums=("SKIP")' >> PKGBUILD
+            echo 'b2sums=("SKIP" "SKIP" "SKIP" "SKIP")' >> PKGBUILD
             
             # Set build options via environment variables
             export _localmodcfg=no
