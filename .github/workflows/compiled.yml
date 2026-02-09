@@ -34,63 +34,36 @@ jobs:
           chown -R builduser:builduser .
           printf 'builduser ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builduser
           
-          export WORKSPACE_PATH=$(pwd)          
-          sudo -E -u builduser bash <<'EOF'
+          sudo -u builduser bash <<'EOF'
             set -e
-            cd "$WORKSPACE_PATH"
-
-            # 1. DOWNLOAD SOURCE
+            
+            # Download source
             echo "--> Downloading Sources..."
             curl -L "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
-
-            # 2. PATCH PKGBUILD
-            echo "--> Patching PKGBUILD..."
             
-            # Update Version strings
+            # Update version in PKGBUILD
+            echo "--> Patching PKGBUILD version..."
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
-
-            # Set build preferences
-            sed -i 's/: "${_localmodcfg:=yes}"/: "${_localmodcfg:=no}"/' PKGBUILD
-            sed -i 's/: "${_makenconfig:=yes}"/: "${_makenconfig:=no}"/' PKGBUILD
-            sed -i 's/: "${_processor_opt:=x86-64}"/: "${_processor_opt:=znver4}"/' PKGBUILD
             
-            # THE PATH-AWARE INJECTION
-            # We find the directory containing 'scripts/config' and CD into it inside prepare()
-            sed -i '/prepare() {/a \
-              echo "--> Locating kernel source..." \
-              KDIR=$(find "$srcdir" -maxdepth 2 -name Makefile -exec dirname {} + | head -n 1) \
-              cd "$KDIR" \
-              echo "--> Forcing BTF and BBR3 configs in $(pwd)..." \
-              scripts/config -e DEBUG_INFO -e DEBUG_INFO_BTF -e DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
-                             -d DEBUG_INFO_REDUCED -d DEBUG_INFO_COMPRESSED -d DEBUG_INFO_SPLIT \
-                             -e TCP_CONG_BBR3 -e DEFAULT_BBR3 \
-                             --set-val HZ 1000 -e HZ_1000 \
-                             -e BPF -e BPF_SYSCALL' PKGBUILD
-
-            # Avoid modprobed.db errors
-            sed -i 's/error "No modprobed.db data found"/echo "Skipping modprobed check"/' PKGBUILD
-
-            # Clean up source and checksum arrays
-            sed -i '/^source=(/,/)/d' PKGBUILD
-            sed -i '/^md5sums=(/,/)/d' PKGBUILD
-            sed -i '/^sha1sums=(/,/)/d' PKGBUILD
-            sed -i '/^sha256sums=(/,/)/d' PKGBUILD
-            sed -i '/^sha384sums=(/,/)/d' PKGBUILD
-            sed -i '/^sha512sums=(/,/)/d' PKGBUILD
+            # Clean checksums and add SKIP
             sed -i '/^b2sums=(/,/)/d' PKGBUILD
-
-            # Re-insert our specific source
-            echo 'source=("linux-6.19-rc8.tar.gz")' >> PKGBUILD
-            echo 'sha256sums=("SKIP")' >> PKGBUILD
-
-            # 3. RUN MAKEPKG
-            echo "--> Starting Makepkg..."
+            echo 'b2sums=("SKIP")' >> PKGBUILD
+            
+            # Set build options via environment variables
+            export _localmodcfg=no
+            export _makenconfig=no
+            export _processor_opt=znver4
+            export _tcp_bbr3=yes
+            export _no_btf=no
+            export _disable_debugging=no
             export TERM=dumb
-            # -s installs missing deps, -f forces build, --skipchecksums for extra safety
+            
+            # Build
+            echo "--> Starting Makepkg..."
             makepkg -sf --noconfirm --skipchecksums
-
-            # 4. RESULTS
+            
+            # Results
             echo "--> Final Package Size Check:"
             du -sh *.pkg.tar.zst || echo "Build failed to produce a package."
           EOF
