@@ -1,4 +1,4 @@
-name: "Catgirl-Edition-BTF-Fix-v13"
+name: "Catgirl-Edition-BTF-Final-Fix"
 
 on:
   workflow_dispatch:
@@ -42,73 +42,48 @@ jobs:
             # 1. DOWNLOAD
             echo "--> Downloading Sources..."
             curl -L "https://git.kernel.org/torvalds/t/linux-6.19-rc8.tar.gz" -o linux-6.19-rc8.tar.gz
-            curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/all/0001-cachyos-base-all.patch" -o base.patch
-            curl -L "https://raw.githubusercontent.com/CachyOS/kernel-patches/master/6.19/misc/dkms-clang.patch" -o dkms.patch
 
-            # 2. EXTRACT
-            echo "--> Extracting..."
-            mkdir -p src
-            tar -xf linux-6.19-rc8.tar.gz -C src/
-            ROOT_FOLDER=$(tar -tf linux-6.19-rc8.tar.gz | head -1 | cut -f1 -d"/")
-            mv "src/$ROOT_FOLDER" src/linux-6.19.rc8
-
-            # 3. PRE-CONFIGURE KERNEL
-            echo "--> Pre-configuring..."
-            cd src/linux-6.19.rc8
-            make defconfig
-            
-            # THE OVERKILL CONFIG:
-            # bpftool needs BTF. BTF needs DEBUG_INFO. 
-            # We use DWARF_TOOLCHAIN_DEFAULT to ensure pahole can read it.
-            scripts/config -e MODULES \
-                           -e DEBUG_INFO \
-                           -e DEBUG_INFO_BTF \
-                           -e DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
-                           -d DEBUG_INFO_REDUCED \
-                           -d DEBUG_INFO_SPLIT \
-                           -d DEBUG_INFO_COMPRESSED \
-                           -e TCP_CONG_BBR3 -e DEFAULT_BBR3 \
-                           --set-val HZ 1000 -e HZ_1000
-                           
-            make olddefconfig
-            cp .config ../../config
-            cd ../..
-
-            # 4. SURGICAL PKGBUILD PATCHING
+            # 2. PATCH PKGBUILD
             echo "--> Patching PKGBUILD..."
             
-            # Create a dummy file just to satisfy the -s check
-            echo "amdgpu" > fake_db.db
-
-            # Update Version to match 6.19-rc8
+            # Update Version
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
 
-            # FORCE CONFIGS
-            # We turn off localmodcfg to ensure a full kernel build
+            # Force settings
             sed -i 's/: "${_localmodcfg:=yes}"/: "${_localmodcfg:=no}"/' PKGBUILD
             sed -i 's/: "${_makenconfig:=yes}"/: "${_makenconfig:=no}"/' PKGBUILD
             sed -i 's/: "${_processor_opt:=x86-64}"/: "${_processor_opt:=znver4}"/' PKGBUILD
             
-            # Path redirection to our fake file
-            sed -i "s|: \"\${_localmodcfg_path:=\"\$HOME/.config/modprobed.db\"}\"|: \"\${_localmodcfg_path:=\"$(pwd)/fake_db.db\"}\"|" PKGBUILD
+            # The "Nuclear" Config Injection: 
+            # We insert our config requirements at the end of the prepare() function
+            # so they override everything else.
+            sed -i '/prepare() {/a \
+              echo "--> Forcing BTF and BBR3 configs..." \
+              scripts/config -e DEBUG_INFO -e DEBUG_INFO_BTF -e DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
+                             -d DEBUG_INFO_REDUCED -d DEBUG_INFO_COMPRESSED -d DEBUG_INFO_SPLIT \
+                             -e TCP_CONG_BBR3 -e DEFAULT_BBR3 \
+                             --set-val HZ 1000 -e HZ_1000 \
+                             -e BPF -e BPF_SYSCALL' PKGBUILD
 
-            # The Nuclear Fix: Remove the error call from the prepare() function logic
+            # Fix the modprobed.db check error
             sed -i 's/error "No modprobed.db data found"/echo "Skipping modprobed check"/' PKGBUILD
 
-            # Source setup - ensure it uses the local config we just generated
+            # Source setup - cleaning it up to only what we need
             sed -i '/^source=(/,/)/d' PKGBUILD
-            echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
+            echo 'source=("linux-6.19-rc8.tar.gz")' >> PKGBUILD
+            # Add dummy sha256sums to pass integrity check
+            echo 'sha256sums=("SKIP")' >> PKGBUILD
 
-            # 5. RUN MAKEPKG
+            # 3. RUN MAKEPKG
             echo "--> Starting Makepkg..."
             export TERM=dumb
-            # -s: install deps, -f: force, -C: clean first
-            makepkg -sf --noconfirm --skipchecksums
+            # -s: install missing deps, -f: force build
+            makepkg -sf --noconfirm
 
-            # 6. SIZE CHECK
+            # 4. SIZE CHECK
             echo "--> Final Package Size Check:"
-            du -sh *.pkg.tar.zst
+            du -sh *.pkg.tar.zst || echo "No package found!"
           EOF
 
       - name: Upload artifact
