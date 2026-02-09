@@ -1,4 +1,4 @@
-name: "Catgirl-Edition-BTF-Fix"
+name: "Catgirl-Edition-BTF-Fix-v13"
 
 on:
   workflow_dispatch:
@@ -57,10 +57,16 @@ jobs:
             cd src/linux-6.19.rc8
             make defconfig
             
-            # ENABLE BTF AND DEBUG INFO
-            # This is critical. bpftool will crash without DEBUG_INFO_BTF enabled.
+            # THE OVERKILL CONFIG:
+            # bpftool needs BTF. BTF needs DEBUG_INFO. 
+            # We use DWARF_TOOLCHAIN_DEFAULT to ensure pahole can read it.
             scripts/config -e MODULES \
-                           -e DEBUG_INFO -e DEBUG_INFO_BTF \
+                           -e DEBUG_INFO \
+                           -e DEBUG_INFO_BTF \
+                           -e DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
+                           -d DEBUG_INFO_REDUCED \
+                           -d DEBUG_INFO_SPLIT \
+                           -d DEBUG_INFO_COMPRESSED \
                            -e TCP_CONG_BBR3 -e DEFAULT_BBR3 \
                            --set-val HZ 1000 -e HZ_1000
                            
@@ -74,7 +80,7 @@ jobs:
             # Create a dummy file just to satisfy the -s check
             echo "amdgpu" > fake_db.db
 
-            # Update Version
+            # Update Version to match 6.19-rc8
             sed -i 's/^_major=.*/_major=6.19/' PKGBUILD
             sed -i 's/^_minor=.*/_minor=.rc8/' PKGBUILD
 
@@ -90,14 +96,14 @@ jobs:
             # The Nuclear Fix: Remove the error call from the prepare() function logic
             sed -i 's/error "No modprobed.db data found"/echo "Skipping modprobed check"/' PKGBUILD
 
-            # Source setup
+            # Source setup - ensure it uses the local config we just generated
             sed -i '/^source=(/,/)/d' PKGBUILD
             echo 'source=("linux-6.19-rc8.tar.gz" "config")' >> PKGBUILD
 
             # 5. RUN MAKEPKG
             echo "--> Starting Makepkg..."
             export TERM=dumb
-            # -s: install deps, -f: force, -i: install (not needed here), -C: clean first
+            # -s: install deps, -f: force, -C: clean first
             makepkg -sf --noconfirm --skipchecksums
 
             # 6. SIZE CHECK
